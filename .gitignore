@@ -52,3 +52,13 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+.fake
+
+
+# User defined files
+*.cache
+obj/*
+lib/*
+
+# ignore test project, can be added later
+MvcClient/
