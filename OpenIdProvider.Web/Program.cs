@@ -62,19 +62,34 @@ builder.Services.AddIdentityServer(options =>
 //    .AddDefaultTokenProviders();
 //
 //
-//builder.Services.Configure<IdentityOptions>(options =>
-//{
-//    options.Password.RequireDigit = true;
-//    options.Password.RequireLowercase = false;
-//    options.Password.RequireNonAlphanumeric = false;
-//    options.Password.RequireUppercase = false;
-//    options.Password.RequiredLength = 6;
-//});
+builder.Services.Configure<IdentityOptions>(options =>
+{
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequiredLength = 6;
+});
 
 
 
 // Add services to the container.
 builder.Services.AddRazorPages();
+
+//builder.Services.AddRazorPages(options =>
+//{
+//    // Захищаємо всі сторінки в папці "Private"
+//    // Це означає, що будь-яка Razor Page в /Pages/Private (і її підпапках)
+//    // вимагатиме авторизації.
+//    options.Conventions.AuthorizeFolder("/Private");
+//
+//    // Можна також захистити конкретну сторінку
+//    // options.Conventions.AuthorizePage("/SecretPage");
+//
+//    // Або дозволити анонімний доступ до певної сторінки в захищеній папці
+//    // options.Conventions.AllowAnonymousToPage("/Private/PublicInfo");
+//});
+
 
 var app = builder.Build();
 
@@ -98,6 +113,6 @@ app.UseAuthorization();
 app.MapRazorPages();
 
 // Initialize IdentityServer
-//SeedData.EnsureSeedData(app);
+// SeedData.EnsureSeedData(app);
 
 app.Run();

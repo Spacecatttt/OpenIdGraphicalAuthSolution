@@ -1,0 +1,86 @@
+@page
+@model YourProjectName.Pages.Organization.CreateOrganizationModel
+@{
+    ViewData["Title"] = "Create Organization";
+    Layout = "DefaultLayout";
+}
+
+<div class="container-1">
+    <div class="container-2">
+        <h3>Create Your First Organization</h3>
+
+        <form method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
+
+            <div class="form-floating mb-2">
+                <input asp-for="Input.Name" class="form-control" id="org-name"
+                    placeholder="Enter organization name..." />
+                <label asp-for="Input.Name" class="form-label">Organization Name</label>
+                <span asp-validation-for="Input.Name" class="text-danger"></span>
+            </div>
+
+            <div class="form-floating mb-2">
+                <textarea asp-for="Input.Description" class="form-control" placeholder="Enter description..."
+                    style="height: 6rem;"></textarea>
+                <label asp-for="Input.Description" class="form-label">Description</label>
+                <span asp-validation-for="Input.Description" class="text-danger"></span>
+            </div>
+
+            <div class="form-floating mb-2">
+                <input asp-for="Input.Slug" class="form-control" id="org-slug" placeholder="Enter slug..." />
+                <label asp-for="Input.Slug" class="form-label">Slug</label>
+                <span asp-validation-for="Input.Slug" class="text-danger"></span>
+            </div>
+
+            <button type="submit" class="btn-success">Create Organization</button>
+        </form>
+
+        <div class="container-inline">
+            <p>Want to go back?</p>
+            <a asp-page="/Account/Register">Sign up</a>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-floating>label {
+        padding: 0.3rem 0.75rem;
+    }
+
+    .form-floating>.form-control {
+        height: 3rem;
+    }
+
+    textarea.form-control {
+        height: auto !important;
+        min-height: 6rem;
+    }
+</style>
+
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        const nameInput = document.getElementById("org-name");
+        const slugInput = document.getElementById("org-slug");
+
+        let slugManuallyEdited = false;
+
+        // When a user manually edits the slug, we no longer change it automatically
+        slugInput.addEventListener("input", () => {
+            slugManuallyEdited = true;
+        });
+
+        // When changing the name field, update the slug if it was not edited manually
+        nameInput.addEventListener("input", () => {
+            if (!slugManuallyEdited) {
+                const slug = nameInput.value
+                    .toLowerCase()
+                    .trim()
+                    .replace(/[^a-z0-9\s-]/g, "")
+                    .replace(/\s+/g, "-");
+                slugInput.value = slug;
+            }
+        });
+    </script>
+}

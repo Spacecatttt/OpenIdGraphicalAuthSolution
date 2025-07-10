@@ -30,11 +30,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
 
 
-        builder.ApplyConfiguration(new ApplicationUserConfiguration());
-        builder.ApplyConfiguration(new GroupConfiguration());
-        builder.ApplyConfiguration(new GroupClaimConfiguration());
-        builder.ApplyConfiguration(new UserGroupConfiguration());
-        builder.ApplyConfiguration(new OrganizationConfiguration());
+        //builder.ApplyConfiguration(new ApplicationUserConfiguration());
+        //builder.ApplyConfiguration(new GroupConfiguration());
+        //builder.ApplyConfiguration(new GroupClaimConfiguration());
+        //builder.ApplyConfiguration(new UserGroupConfiguration());
+        //builder.ApplyConfiguration(new OrganizationConfiguration());
 
     }
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

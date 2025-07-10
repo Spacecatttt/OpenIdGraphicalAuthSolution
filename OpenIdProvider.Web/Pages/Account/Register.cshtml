@@ -1,0 +1,67 @@
+@page
+@model YourProjectName.Pages.Account.RegisterModel
+@{
+    ViewData["Title"] = "Register";
+    Layout = "DefaultLayout";
+}
+
+<div class="container-1">
+    <div class="container-2">
+        <h3>Sign up</h3>
+
+        <form asp-route-returnUrl="@Model.ReturnUrl" method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
+            <div class="form-floating mb-2">
+                <input asp-for="Input.UserName" class="form-control" placeholder="Enter your username..." />
+                <label asp-for="Input.UserName" class="form-label">Username</label>
+                <span asp-validation-for="Input.UserName" class="text-danger"></span>
+            </div>
+            <div class="form-floating mb-2">
+                <input asp-for="Input.DisplayName" class="form-control" placeholder="Enter your display name..." />
+                <label asp-for="Input.DisplayName" class="form-label">Visible name</label>
+                <span asp-validation-for="Input.DisplayName" class="text-danger"></span>
+            </div>
+            <div class="form-floating mb-2">
+                <input asp-for="Input.Email" class="form-control" autocomplete="username" aria-required="true"
+                    placeholder="Enter your email..." />
+                <label asp-for="Input.Email" class="form-label">Email</label>
+                <span asp-validation-for="Input.Email" class="text-danger"></span>
+            </div>
+            <div class="form-floating mb-2">
+                <input asp-for="Input.Password" class="form-control" autocomplete="new-password" aria-required="true"
+                    placeholder="Enter your password..." />
+                <label asp-for="Input.Password" class="form-label">Password</label>
+                <span asp-validation-for="Input.Password" class="text-danger"></span>
+            </div>
+            <div class="form-floating mb-2">
+                <input asp-for="Input.ConfirmPassword" class="form-control" autocomplete="new-password"
+                    aria-required="true" placeholder="Confirm your password..." />
+                <label asp-for="Input.ConfirmPassword" class="form-label">Confirm Password</label>
+                <span asp-validation-for="Input.ConfirmPassword" class="text-danger"></span>
+            </div>
+            <button type="submit" class="btn-success">Next step</button>
+        </form>
+
+        <div class="container-inline">
+            <p>Already registered?</p>
+            <a asp-page="./Login">Sign in</a>
+        </div>
+    </div>
+    <div class="container-3">
+        <img src="/images/mountainsSignUp.png" alt="Mountains illustration" />
+    </div>
+</div>
+
+<style>
+    .form-floating>label {
+        padding: 0.3rem 0.75rem;
+    }
+
+    .form-floating>.form-control {
+        height: 3rem;
+    }
+</style>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

@@ -1,4 +1,3 @@
-// In OpenIdProvider.Web/SeedData.cs
 using System.Security.Claims;
 using Duende.IdentityServer.EntityFramework.DbContexts;
 using Duende.IdentityServer.EntityFramework.Mappers;
@@ -25,13 +24,12 @@ public static class SeedData
             {
                 context.Organizations.Add(new Organization
                 {
-                    Id = new Guid("11111111-1111-1111-1111-111111111111"),
-                    Name = "Default Org"
+                    Id = new Guid(),
+                    Name = "admin"
                 });
                 context.SaveChanges();
             }
 
-            // Seed clients
             if (!configContext.Clients.Any())
             {
                 foreach (var client in Config.Clients)
@@ -41,7 +39,6 @@ public static class SeedData
                 configContext.SaveChanges();
             }
 
-            // Seed Identity Resources
             if (!configContext.IdentityResources.Any())
             {
                 foreach (var resource in Config.IdentityResources)
@@ -51,7 +48,6 @@ public static class SeedData
                 configContext.SaveChanges();
             }
 
-            // Seed API Scopes
             if (!configContext.ApiScopes.Any())
             {
                 foreach (var scopeResource in Config.ApiScopes)
@@ -63,25 +59,22 @@ public static class SeedData
 
             // Seed a test user
             var userMgr = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-            if (userMgr.FindByNameAsync("alice").Result == null)
+            if (userMgr.FindByNameAsync("admin").Result == null)
             {
-                var alice = new ApplicationUser
+                var admin = new ApplicationUser
                 {
-                    UserName = "alice",
-                    Email = "AliceSmith@email.com",
-                    EmailConfirmed = true,
-                    OrganizationId = new Guid("11111111-1111-1111-1111-111111111111")
+                    UserName = "admin",
+                    PrimaryOrganizationId = context.Organizations.First().Id,
                 };
 
-                var result = userMgr.CreateAsync(alice, "Pass123$").Result;
+                var result = userMgr.CreateAsync(admin, "admin123").Result;
                 if (!result.Succeeded)
                 {
                     throw new Exception(result.Errors.First().Description);
                 }
 
-                result = userMgr.AddClaimsAsync(alice, new Claim[]{
-                    new Claim("name", "Alice Smith"),
-                    new Claim("email", "AliceSmith@email.com")
+                result = userMgr.AddClaimsAsync(admin, new Claim[]{
+                    new Claim("name", "admin")
                 }).Result;
             }
         }
@@ -102,13 +95,13 @@ public static class Config
     public static IEnumerable<ApiScope> ApiScopes =>
         new ApiScope[]
         {
-            new ApiScope("api1", "My API")
+            new ApiScope("admin-api", "My API")
         };
 
     public static IEnumerable<Client> Clients =>
         new Client[]
         {
-            // Simple MVC client for testing
+            // Simple MVC client for testing TODO: remove in production
             new Client
             {
                 ClientId = "mvc",
@@ -121,7 +114,14 @@ public static class Config
                 // where to redirect to after logout
                 PostLogoutRedirectUris = { "https://localhost:7002/signout-callback-oidc" },
 
-                AllowedScopes = { "openid", "profile", "email", "api1" }
+                AllowedScopes = { "openid", "profile", "email", "admin-api" }
             }
+            //new Client
+            //{
+            //    ClientId = "default",
+            //    ClientSecrets = { new Secret("secret".Sha256()) },
+            //    AllowedGrantTypes = GrantTypes.Code,
+            //    AllowedScopes = { "openid", "profile", "email", "admin-api" }
+            //}
         };
 }

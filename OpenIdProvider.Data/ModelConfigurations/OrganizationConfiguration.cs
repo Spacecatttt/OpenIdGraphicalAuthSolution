@@ -14,6 +14,7 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
         builder.HasIndex(o => o.Slug).IsUnique();
 
         builder.Property(o => o.Name).IsRequired().HasMaxLength(256);
+        builder.Property(o => o.Description).IsRequired(false);
         builder.Property(o => o.Slug).IsRequired().HasMaxLength(100);
 
         // Configure the one-to-many relationship with its own Groups
