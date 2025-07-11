@@ -1,0 +1,118 @@
+@page "/"
+@model OpenIdProvider.Web.Pages.DashboardModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="title">Total users</div>
+        <div class="value">@Model.TotalUsers.ToString("N0")</div>
+    </div>
+    <div class="stat-card">
+        <div class="title">New users today</div>
+        <div class="value">@Model.NewUsersToday.ToString("N0")<span class="change">↑</span></div>
+    </div>
+    <div class="stat-card">
+        <div class="title">New users past 7 days</div>
+        <div class="value">@Model.NewUsersPast7Days.ToString("N0") <span class="change">↑</span></div>
+    </div>
+    <div class="stat-card">
+        <div class="title">New users past 30 days</div>
+        <div class="value">@Model.NewUsersPast30Days.ToString("N0") <span class="change">↑</span></div>
+    </div>
+</div>
+
+<div class="chart-container">
+    <div class="chart-header">
+        <h3>Past 30 Days</h3>
+    </div>
+    <div class="chart-legend">
+        <div class="legend-item"><span class="legend-dot" style="background-color: #A3E635;"></span>Users</div>
+        <div class="legend-item"><span class="legend-dot" style="background-color: #FB923C;"></span>Clients</div>
+        <div class="legend-item"><span class="legend-dot" style="background-color: #F87171;"></span>Organizations
+        </div>
+        <div class="legend-item"><span class="legend-dot" style="background-color: #F472B6;"></span>Groups</div>
+    </div>
+    <canvas id="mainChart"></canvas>
+</div>
+
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let myChart;
+
+        document.addEventListener("DOMContentLoaded", function () {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+
+            function updateChartColors() {
+                if (myChart) {
+                    myChart.options.scales.y.ticks.color = getComputedStyle(document.documentElement).getPropertyValue('--chart-text-color');
+                    myChart.options.scales.y.grid.color = getComputedStyle(document.documentElement).getPropertyValue('--border-color');
+                    myChart.options.scales.x.ticks.color = getComputedStyle(document.documentElement).getPropertyValue('--chart-text-color');
+                    myChart.update();
+                }
+            }
+
+            const labels = Array.from({ length: 30 }, (_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - (29 - i));
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            });
+            const chartData = JSON.parse('@Html.Raw(Model.ChartDataJson)');
+
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Usuarios',
+                        data: chartData,
+                        borderColor: '#A3E635',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: 200,
+                            max: 2000,
+                            ticks: {
+                                color: 'var(--chart-text-color)'
+                            },
+                            grid: {
+                                color: 'var(--border-color)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: 'var(--chart-text-color)',
+                                maxRotation: 0,
+                                minRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 15
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+            updateChartColors();
+        });
+
+
+        document.addEventListener('themeChanged', updateChartColors);
+    </script>
+}

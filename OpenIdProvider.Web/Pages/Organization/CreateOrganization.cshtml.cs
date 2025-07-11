@@ -8,7 +8,7 @@ using System.Text.Json;
 using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models; // Ensure your User and Organization models are referenced
 
-namespace YourProjectName.Pages.Organization
+namespace OpenIdProvider.Web.Pages.Organization
 {
     public class CreateOrganizationModel : PageModel
     {

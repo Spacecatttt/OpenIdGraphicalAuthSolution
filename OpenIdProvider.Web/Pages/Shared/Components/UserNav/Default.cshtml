@@ -1,0 +1,30 @@
+@model UserNavViewModel
+
+<select class="form-select org-selector">
+    @foreach (var org in Model.UserOrganizations)
+    {
+        <option value="@org.Id">@org.Name</option>
+    }
+</select>
+
+<a href="#" class="icon-btn" id="theme-toggle" title="Toggle theme">☀️</a>
+<div class="profile">
+    <img src="@Model.UserAvatarUrl" alt="@Model.UserName" />
+    <span>@Model.UserName</span>
+</div>
+
+<style>
+    .profile img {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+    }
+
+    .icon-btn,
+    .profile {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-secondary);
+    }
+</style>

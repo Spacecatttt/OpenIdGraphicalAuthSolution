@@ -1,5 +1,5 @@
 @page
-@model YourProjectName.Pages.Account.LoginModel
+@model OpenIdProvider.Web.Pages.Account.LoginModel
 @{
     ViewData["Title"] = "Log in";
     Layout = "DefaultLayout";
@@ -24,7 +24,7 @@
             </div>
             <div class="form-floating mb-2">
                 <input asp-for="Input.Password" class="form-control" autocomplete="current-password"
-                    placeholder="Enter your password..."/>
+                    placeholder="Enter your password..." />
                 <label asp-for="Input.Password" class="form-label">Password</label>
                 <span asp-validation-for="Input.Password" class="text-danger"></span>
             </div>
@@ -52,7 +52,7 @@
         padding: 0.3rem 0.75rem;
     }
 
-    .form-floating > .form-control{
+    .form-floating>.form-control {
         height: 3.2rem;
     }
 </style>
