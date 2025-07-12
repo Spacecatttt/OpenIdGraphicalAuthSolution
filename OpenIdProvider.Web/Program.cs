@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
+using OpenIdProvider.Web.Services;
 using Serilog;
 
 
@@ -90,8 +91,32 @@ builder.Services.AddRazorPages();
 //    // options.Conventions.AllowAnonymousToPage("/Private/PublicInfo");
 //});
 
+builder.Services.AddScoped<IOrganizationResolver, OrganizationResolver>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var dbContext = services.GetRequiredService<ApplicationDbContext>();
+        if (dbContext.Database.CanConnect())
+        {
+            app.Logger.LogInformation("Database connection successfully established and warmed up.");
+        }
+        else
+        {
+            app.Logger.LogWarning("Failed to connect to the database during warmup.");
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while connecting to the database during warmup.");
+    }
+}
+
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

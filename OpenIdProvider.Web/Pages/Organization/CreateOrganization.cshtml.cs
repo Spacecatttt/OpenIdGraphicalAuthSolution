@@ -1,12 +1,15 @@
-// In Pages/Organization/CreateOrganization.cshtml.cs
+using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
+using System.Text.Json;
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+
 using OpenIdProvider.Data;
-using OpenIdProvider.Data.Models; // Ensure your User and Organization models are referenced
+using OpenIdProvider.Data.Models;
+
 
 namespace OpenIdProvider.Web.Pages.Organization
 {
@@ -108,13 +111,34 @@ namespace OpenIdProvider.Web.Pages.Organization
                 if (result.Succeeded)
                 {
                     _logger.LogInformation("User created a new account with a password.");
-
                     // If everything is successful, commit the transaction.
                     await transaction.CommitAsync();
 
+                    // --- START: Add Custom Claims Here ---
+                    var currentUserWithDetails = await _userManager.Users
+                        .Include(u => u.PrimaryOrganization)
+                        .FirstOrDefaultAsync(u => u.Id == user.Id);
+
+                    var claims = new List<Claim>
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                        new Claim(ClaimTypes.Name, user.UserName!),
+
+                        new Claim("DisplayName", currentUserWithDetails?.DisplayName ?? user.UserName!),
+                        new Claim("AvatarUrl", currentUserWithDetails?.AvatarUrl ?? "https://i.pravatar.cc/32"),
+                        new Claim("PrimaryOrganizationId", currentUserWithDetails?.PrimaryOrganizationId.ToString() ?? string.Empty)
+                    };
+
+                    var originalPrincipal = await _signInManager.CreateUserPrincipalAsync(user);
+                    var identity = (ClaimsIdentity)originalPrincipal.Identity!;
+
+                    identity.AddClaims(claims);
+                    // --- END: Add Custom Claims Here ---
+
                     // Sign the new user in.
-                    await _signInManager.SignInAsync(user, isPersistent: false);
-                    return Redirect($"/Dashboard/{organization.Slug}");
+                    await _signInManager.SignInAsync(user, isPersistent: false, identity.AuthenticationType);
+
+                    return LocalRedirect(returnUrl);
                 }
 
                 // If user creation failed, add errors to ModelState. The transaction will be rolled back.

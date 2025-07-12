@@ -1,56 +1,93 @@
+using System.Security.Claims;
+using System.Text.Json;
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using System.Collections.Generic;
-using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using OpenIdProvider.Data;
+using OpenIdProvider.Web.Services;
 
-namespace OpenIdProvider.Web.Pages;
-
-[Authorize]
-public class DashboardModel : PageModel
+namespace OpenIdProvider.Web.Pages.Home
 {
-    [BindProperty]
-    public int TotalUsers { get; set; }
-
-    [BindProperty]
-    public int NewUsersToday { get; set; }
-
-    [BindProperty]
-    public int NewUsersPast7Days { get; set; }
-
-    [BindProperty]
-    public int NewUsersPast30Days { get; set; }
-    public string ChartDataJson { get; private set; }
-
-    public DashboardModel()
+    [Authorize]
+    public class DashboardModel : PageModel
     {
-        // Конструктор можна залишити порожнім або використати для ін'єкції залежностей
-    }
 
-    public void OnGet()
-    {
-        // --- ТУТ ВИ БУДЕТЕ ОТРИМУВАТИ РЕАЛЬНІ ДАНІ З БАЗИ ДАНИХ ---
+        private readonly ILogger<DashboardModel> _logger;
+        private readonly ApplicationDbContext _dbContext;
+        private readonly IOrganizationResolver _organizationResolver;
 
-        // Поки що, використаємо ті ж самі статичні дані, що й у HTML
-        TotalUsers = 3554;
-        NewUsersToday = 0;
-        NewUsersPast7Days = 0;
-        NewUsersPast30Days = 0;
+        [BindProperty(SupportsGet = true)]
+        public string? OrgSlug { get; set; }
+        public Data.Models.Organization? CurrentOrganization { get; private set; }
 
-        // Згенеруємо дані для графіка з кривою лінією в діапазоні від 400 до 2000
-        var chartData = new List<int>();
-        var random = new Random();
-        int value = 400;
-        for (int i = 0; i < 30; i++)
+        [BindProperty]
+        public int TotalUsers { get; set; }
+
+        [BindProperty]
+        public int NewUsersToday { get; set; }
+
+        [BindProperty]
+        public int NewUsersPast7Days { get; set; }
+
+        [BindProperty]
+        public int NewUsersPast30Days { get; set; }
+        public string ChartDataJson { get; private set; }
+
+        public DashboardModel(ILogger<DashboardModel> logger, ApplicationDbContext dbContext, IOrganizationResolver organizationResolver)
         {
-            // Додаємо випадковий приріст або спад, щоб лінія була "кривою"
-            value += random.Next(-100, 150);
-            // Обмежуємо значення в межах 400..2000
-            value = Math.Max(400, Math.Min(2000, value));
-            chartData.Add(value);
+            _logger = logger;
+            _dbContext = dbContext;
+            _organizationResolver = organizationResolver;
+            ChartDataJson = string.Empty;
         }
 
-        // Серіалізуємо дані в JSON, щоб легко передати їх у JavaScript
-        ChartDataJson = JsonSerializer.Serialize(chartData);
+        public async Task OnGetAsync()
+        {
+            if (string.IsNullOrWhiteSpace(OrgSlug))
+            {
+                var org = await _organizationResolver.ResolvePrimaryOrganizationAsync(User);
+                if (org != null)
+                {
+                    OrgSlug = org.Slug;
+                    CurrentOrganization = org;
+                }
+            }
+            _logger.LogInformation("Dashboard accessed for organization: {OrgSlug}", OrgSlug);
+            CurrentOrganization = await _dbContext.Organizations.FirstOrDefaultAsync(o => o.Slug == OrgSlug);
+
+            if (CurrentOrganization == null)
+            {
+                Response.StatusCode = 404;
+                return;
+            }
+
+            var today = DateTime.UtcNow.Date;
+            var past7Days = today.AddDays(-7);
+            var past30Days = today.AddDays(-30);
+
+            TotalUsers = CurrentOrganization.ManagedByUsers.Count;
+            NewUsersToday = CurrentOrganization.ManagedByUsers
+                .Count(u => u.AddedDate.Date == today);
+            NewUsersPast7Days = CurrentOrganization.ManagedByUsers
+                .Count(u => u.AddedDate >= past7Days);
+            NewUsersPast30Days = CurrentOrganization.ManagedByUsers
+                .Count(u => u.AddedDate >= past30Days);
+
+            // Generate data for graph for 30 days
+            var chartData = new List<int>();
+            for (int i = 29; i >= 0; i--)
+            {
+                var day = today.AddDays(-i);
+
+                int countForDay = CurrentOrganization.ManagedByUsers
+                    .Count(u => u.AddedDate.Date == day);
+
+                chartData.Add(countForDay);
+            }
+
+            ChartDataJson = JsonSerializer.Serialize(chartData);
+        }
     }
 }

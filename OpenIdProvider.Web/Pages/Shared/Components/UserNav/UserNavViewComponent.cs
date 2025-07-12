@@ -1,54 +1,86 @@
-using Microsoft.AspNetCore.Mvc;
-using System.Collections.Generic;
-using System.Linq;
 using System.Security.Claims;
-using System.Threading.Tasks;
 
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
 
 public class UserNavViewModel
 {
-    public List<Organization> UserOrganizations { get; set; }
-    public string UserName { get; set; }
-    public string UserAvatarUrl { get; set; }
+    public List<Organization> UserOrganizations { get; set; } = new List<Organization>();
+    public string? UserName { get; set; }
+    public string? UserAvatarUrl { get; set; }
+    public string? SelectedOrganizationSlug { get; set; }
 }
 
 public class UserNavViewComponent : ViewComponent
 {
-    public async Task<IViewComponentResult> InvokeAsync()
+
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ApplicationDbContext _dbContext;
+    private readonly ILogger<UserNavViewComponent> _logger;
+
+    public UserNavViewComponent(UserManager<ApplicationUser> userManager, ApplicationDbContext dbContext, ILogger<UserNavViewComponent> logger)
     {
-        var model = new UserNavViewModel();
+        _userManager = userManager;
+        _dbContext = dbContext;
+        _logger = logger;
+    }
 
-        model.UserName = User.Identity.IsAuthenticated ? User.Identity.Name : "Guest";
-
-        // Приклад: отримати GivenName замість повного імені
-        var givenNameClaim = ((ClaimsPrincipal)User).FindFirst(ClaimTypes.GivenName);
-        if (givenNameClaim != null)
+    public async Task<IViewComponentResult> InvokeAsync(string? selectedOrganizationSlug)
+    {
+        var model = new UserNavViewModel
         {
-            model.UserName = givenNameClaim.Value;
-        }
-        else if (User.Identity.IsAuthenticated)
-        {
-            model.UserName = User.Identity.Name ?? "Авторизований користувач";
-        }
-        else
-        {
-            model.UserName = "Гість";
-        }
-
-
-        // Get avatar URL (if available) //TODO
-        // model.UserAvatarUrl = ((ClaimsPrincipal)User).FindFirst("AvatarUrl")?.Value ?? "https://i.pravatar.cc/32";
-        model.UserAvatarUrl = "https://i.pravatar.cc/32";
-
-        // Отримання списку організацій (приклад, у реальності буде з БД)
-        model.UserOrganizations = new List<Organization>
-        {
-            new Organization { Id = new Guid(), Name = "Built-in Organization" },
-            new Organization { Id = new Guid(), Name = "Company A" },
-            new Organization { Id = new Guid(), Name = "Company B" }
+            SelectedOrganizationSlug = selectedOrganizationSlug
         };
 
+        if (User != null && User.Identity != null && User.Identity.IsAuthenticated)
+        {
+            if (User is not ClaimsPrincipal claimsPrincipal)
+            {
+                _logger.LogWarning("User is authenticated but ClaimsPrincipal is null.");
+                return View(model);
+            }
+
+            // nullable check in Login/SignUp
+            model.UserName = claimsPrincipal.FindFirst("DisplayName")!.Value;
+            model.UserAvatarUrl = claimsPrincipal.FindFirst("AvatarUrl")!.Value;
+            var primaryOrgIdClaim = claimsPrincipal.FindFirst("PrimaryOrganizationId");
+            if (primaryOrgIdClaim != null && Guid.TryParse(primaryOrgIdClaim.Value, out Guid primaryOrgId))
+            {
+                var primaryOrganization = await _dbContext.Organizations
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(o => o.Id == primaryOrgId);
+
+                if (primaryOrganization != null)
+                {
+                    model.UserOrganizations.Add(primaryOrganization);
+                    model.SelectedOrganizationSlug = selectedOrganizationSlug ?? primaryOrganization.Slug;
+                }
+            }
+
+            var userId = _userManager.GetUserId(claimsPrincipal);
+            if (userId != null)
+            {
+                var userWithManagedOrgs = await _dbContext.Users
+                    .Include(u => u.ManagedOrganizations)
+                        .ThenInclude(mo => mo.Organization)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+
+                if (userWithManagedOrgs != null)
+                {
+                    model.UserOrganizations.AddRange(
+                        userWithManagedOrgs
+                        .ManagedOrganizations
+                        .Select(mo => mo.Organization)
+                        );
+                }
+            }
+            model.UserOrganizations = model.UserOrganizations.DistinctBy(o => o.Id).ToList();
+        }
         return View(model);
     }
 }

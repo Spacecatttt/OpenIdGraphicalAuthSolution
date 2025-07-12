@@ -57,7 +57,8 @@ nunit-*.xml
 
 # User defined files
 *.cache
-obj/*
+**/bin/
+**/obj/
 lib/*
 
 # ignore test project, can be added later

@@ -1,15 +1,33 @@
-// In Pages/Account/Register.cshtml.cs
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json; // Required for serialization
+
+using OpenIdProvider.Data;
+using OpenIdProvider.Data.Models;
 
 namespace OpenIdProvider.Web.Pages.Account
 {
     public class RegisterModel : PageModel
     {
-        // ... (Keep existing properties and constructor)
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly SignInManager<ApplicationUser> _signInManager;
+        private readonly ApplicationDbContext _dbContext;
+        private readonly ILogger<RegisterModel> _logger;
+
+        public RegisterModel(
+            UserManager<ApplicationUser> userManager,
+            SignInManager<ApplicationUser> signInManager,
+            ApplicationDbContext dbContext,
+            ILogger<RegisterModel> logger)
+        {
+            _userManager = userManager;
+            _signInManager = signInManager;
+            _dbContext = dbContext;
+            _logger = logger;
+        }
 
         [BindProperty]
         public InputModel? Input { get; set; }
@@ -43,18 +61,56 @@ namespace OpenIdProvider.Web.Pages.Account
             ReturnUrl = returnUrl;
         }
 
-        public Task<IActionResult> OnPostAsync()
+        public async Task<IActionResult> OnPostAsync()
         {
             if (!ModelState.IsValid)
             {
-                return Task.FromResult<IActionResult>(Page());
+                return Page();
             }
+
+            var existingUserName = await _userManager.FindByNameAsync(Input!.UserName);
+            if (existingUserName != null)
+            {
+                ModelState.AddModelError("Input.UserName", "A user with this username already exists.");
+                return Page();
+            }
+
+            var existingUserEmail = await _userManager.FindByEmailAsync(Input!.Email);
+            if (existingUserEmail != null)
+            {
+                ModelState.AddModelError("Input.Email", "A user with this email address already exists.");
+                return Page();
+            }
+
+            var tempUser = new ApplicationUser { UserName = Input.UserName, Email = Input.Email };
+            var passwordValidationErrors = new List<string>();
+            foreach (var validator in _userManager.PasswordValidators)
+            {
+                var result = await validator.ValidateAsync(_userManager, tempUser, Input.Password);
+                if (!result.Succeeded)
+                {
+                    foreach (var error in result.Errors)
+                    {
+                        passwordValidationErrors.Add(error.Description);
+                    }
+                }
+            }
+
+            if (passwordValidationErrors.Any())
+            {
+                foreach (var errorDescription in passwordValidationErrors)
+                {
+                    ModelState.AddModelError("Input.Password", errorDescription);
+                }
+                return Page();
+            }
+
 
             // Temporarily store the new user's data to pass to the next step.
             TempData["NewUserData"] = JsonSerializer.Serialize(Input);
 
             // Redirect to the organization creation page.
-            return Task.FromResult<IActionResult>(RedirectToPage("/Organization/CreateOrganization"));
+            return LocalRedirect("/Organization/CreateOrganization");
         }
     }
 }
