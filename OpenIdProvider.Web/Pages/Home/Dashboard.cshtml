@@ -1,5 +1,5 @@
 @page "/"
-@model OpenIdProvider.Web.Pages.DashboardModel
+@model OpenIdProvider.Web.Pages.Home.DashboardModel
 @{
     ViewData["Title"] = "Dashboard";
 }
@@ -43,17 +43,18 @@
     <script>
         let myChart;
 
+
+        function updateChartColors() {
+            if (myChart) {
+                myChart.options.scales.y.ticks.color = getComputedStyle(document.documentElement).getPropertyValue('--chart-text-color');
+                myChart.options.scales.y.grid.color = getComputedStyle(document.documentElement).getPropertyValue('--border-color');
+                myChart.options.scales.x.ticks.color = getComputedStyle(document.documentElement).getPropertyValue('--chart-text-color');
+                myChart.update();
+            }
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
             const ctx = document.getElementById('mainChart').getContext('2d');
-
-            function updateChartColors() {
-                if (myChart) {
-                    myChart.options.scales.y.ticks.color = getComputedStyle(document.documentElement).getPropertyValue('--chart-text-color');
-                    myChart.options.scales.y.grid.color = getComputedStyle(document.documentElement).getPropertyValue('--border-color');
-                    myChart.options.scales.x.ticks.color = getComputedStyle(document.documentElement).getPropertyValue('--chart-text-color');
-                    myChart.update();
-                }
-            }
 
             const labels = Array.from({ length: 30 }, (_, i) => {
                 const d = new Date();
