@@ -63,3 +63,4 @@ lib/*
 
 # ignore test project, can be added later
 MvcClient/
+OpenIdProvider.Blazor/

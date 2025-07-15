@@ -18,7 +18,7 @@ public class Group
     public Guid OrganizationId { get; set; }
     public virtual Organization Organization { get; set; } = null!;
 
-    public virtual ICollection<UserGroup> Users { get; set; } = new List<UserGroup>();
+    public virtual ICollection<ApplicationUser> Users { get; set; } = new List<ApplicationUser>();
 
     // Claims assigned directly to this group
     public virtual ICollection<GroupClaim> Claims { get; set; } = new List<GroupClaim>();

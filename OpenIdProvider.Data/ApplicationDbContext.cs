@@ -11,7 +11,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
 {
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupClaim> GroupClaims { get; set; }
-    public DbSet<UserGroup> UserGroups { get; set; }
     public DbSet<Organization> Organizations { get; set; }
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)

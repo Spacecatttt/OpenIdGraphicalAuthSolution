@@ -18,7 +18,7 @@ public class ApplicationUser : IdentityUser<Guid>
 
     [ForeignKey("PrimaryOrganizationId")]
     public virtual Organization PrimaryOrganization { get; set; } = null!;
-    public virtual ICollection<UserGroup> Groups { get; set; } = new List<UserGroup>();
+    public virtual ICollection<Group> Groups { get; set; } = new List<Group>();
 
     // This collection represents additional organizations a user might manage
     // or have a role in, beyond their PrimaryOrganization.

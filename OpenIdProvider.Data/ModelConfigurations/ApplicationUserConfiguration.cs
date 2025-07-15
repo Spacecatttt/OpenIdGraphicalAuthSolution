@@ -8,15 +8,16 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
 {
     public void Configure(EntityTypeBuilder<ApplicationUser> builder)
     {
+        builder.Property(u => u.DisplayName).IsRequired();
 
-        builder.Property(g => g.DisplayName).IsRequired();
-        // Configure the one-to-many relationship with Organization
         builder.HasOne(u => u.PrimaryOrganization)
                .WithMany(o => o.PrimaryUsers)
                .HasForeignKey(u => u.PrimaryOrganizationId)
                .OnDelete(DeleteBehavior.Cascade);
 
-        // Note: The many-to-many relationship with Group is configured
-        // in the UserGroupConfiguration file.
+        // many-to-many relationship with Group
+        builder.HasMany(u => u.Groups)
+               .WithMany(g => g.Users)
+               .UsingEntity(j => j.ToTable("UserGroups"));
     }
 }

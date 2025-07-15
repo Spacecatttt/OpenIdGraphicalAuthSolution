@@ -139,5 +139,6 @@ app.MapRazorPages();
 
 // Initialize IdentityServer
 // SeedData.EnsureSeedData(app);
+//AddData.EnsureSeedData(app);
 
 app.Run();

@@ -14,7 +14,7 @@ public class GroupConfiguration : IEntityTypeConfiguration<Group>
         builder.Property(g => g.Description).HasMaxLength(1024);
 
         // The one-to-many relationship with Organization is configured in OrganizationConfiguration.
-        // The many-to-many with User is configured in UserGroupConfiguration.
+        // The many-to-many with User is configured in ApplicationUserConfiguration.
 
         // Configure the one-to-many relationship with its claims
         builder.HasMany(g => g.Claims)
