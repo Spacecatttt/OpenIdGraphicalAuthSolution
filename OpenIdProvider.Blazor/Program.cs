@@ -1,37 +1,51 @@
-using OpenIdProvider.Blazor.Components;
-using Duende.IdentityModel.Client;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+
+using Duende.IdentityModel.Client;
+
+using OpenIdProvider.Blazor.Components;
+using OpenIdProvider.Blazor.Components.Account;
+using OpenIdProvider.Blazor.Endpoints;
+using OpenIdProvider.Blazor.Services;
 using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
-using OpenIdProvider.Blazor.Services;
+
 using Serilog;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Serilog (copied from old project)
+// Configure Serilog
 builder.Host.UseSerilog((ctx, lc) => lc
     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level}] {SourceContext}{NewLine}{Message:lj}{NewLine}{Exception}{NewLine}")
     .Enrich.FromLogContext()
     .ReadFrom.Configuration(ctx.Configuration));
 
-// Add services to the container.
+// Blazor settings
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// --- Variables ---
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var migrationsAssembly = typeof(ApplicationDbContext).Assembly.GetName().Name;
 
-// Add ASP.NET Core Identity
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(
-        connectionString,
-        sqlOptions => sqlOptions.MigrationsAssembly(migrationsAssembly))
-             .UseLazyLoadingProxies());
+// --- Authentication & Authorization Configuration ---
 
+// Add authentication and authorization for application
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
+
+// ASP.NET Core Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
     {
-        // You can also move the password options here
         options.SignIn.RequireConfirmedAccount = false;
         options.Password.RequireDigit = true;
         options.Password.RequireLowercase = false;
@@ -42,7 +56,14 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
-// Register Duende IdentityServer
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "OpenIdProvider.Blazor.Auth";
+        options.LoginPath = "/account/login";
+    });
+
+// Duende IdentityServer
 builder.Services.AddIdentityServer(options =>
     {
         options.Events.RaiseErrorEvents = true;
@@ -63,41 +84,29 @@ builder.Services.AddIdentityServer(options =>
     })
     .AddAspNetIdentity<ApplicationUser>();
 
-// here RequireConfirmedAccount
-//builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = false)
-//    .AddEntityFrameworkStores<ApplicationDbContext>()
-//    .AddSignInManager()
-//    .AddDefaultTokenProviders();
-//
-//
+// Provides the authentication state to Blazor components
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddAuthorizationCore();
 
-builder.Services.Configure<IdentityOptions>(options =>
-{
-    options.Password.RequireDigit = true;
-    options.Password.RequireLowercase = false;
-    options.Password.RequireNonAlphanumeric = false;
-    options.Password.RequireUppercase = false;
-    options.Password.RequiredLength = 6;
-});
+// --- Database and Other Services ---
+builder.Services.AddScoped<IdentityRedirectManager>();
+builder.Services.AddScoped<IOrganizationResolver, OrganizationResolver>();
 
-//builder.Services.AddRazorPages(options =>
-//{TODO
-//    // Захищаємо всі сторінки в папці "Private"
-//    // Це означає, що будь-яка Razor Page в /Pages/Private (і її підпапках)
-//    // вимагатиме авторизації.
-//    options.Conventions.AuthorizeFolder("/Private");
-//
-//    // Можна також захистити конкретну сторінку
-//    // options.Conventions.AuthorizePage("/SecretPage");
-//
-//    // Або дозволити анонімний доступ до певної сторінки в захищеній папці
-//    // options.Conventions.AllowAnonymousToPage("/Private/PublicInfo");
-//});
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseNpgsql(
+        connectionString,
+        sqlOptions => sqlOptions.MigrationsAssembly(migrationsAssembly))
+           .UseLazyLoadingProxies());
 
 // Add support for Razor Pages (for IdentityServer UI)
 builder.Services.AddRazorPages();
 
-builder.Services.AddScoped<IOrganizationResolver, OrganizationResolver>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped(sp =>
+{
+    var navigationManager = sp.GetRequiredService<NavigationManager>();
+    return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
+});
 
 var app = builder.Build();
 
@@ -136,9 +145,11 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 
-// Add IdentityServer to the pipeline (before Authorization)
+//
+app.UseAuthentication();
 app.UseIdentityServer();
 app.UseAuthorization();
+
 app.UseAntiforgery();
 
 // ---Endpoint Mapping-- -
@@ -147,8 +158,10 @@ app.MapRazorPages();
 app.MapRazorComponents<App>()
    .AddInteractiveServerRenderMode();
 
+app.MapAccountEndpoints();
+
 // Initialize IdentityServer
 // SeedData.EnsureSeedData(app);
-//AddData.EnsureSeedData(app);
+// AddData.EnsureSeedData(app);
 
 app.Run();
