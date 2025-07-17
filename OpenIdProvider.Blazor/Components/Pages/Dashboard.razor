@@ -1,0 +1,232 @@
+﻿@page "/"
+@attribute [Authorize]
+
+@using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using OpenIdProvider.Blazor.Services
+@inject ILogger<Dashboard> Logger
+@inject IOrganizationResolver OrganizationResolver
+@inject IJSRuntime JSRuntime
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject AppState AppState
+
+<PageTitle>Dashboard</PageTitle>
+
+@if (isLoading)
+{
+    <div class="status-container">
+        <p class="status-message"><em>Loading dashboard...</em></p>
+    </div>
+}
+else if (dashboardData is null || AppState.SelectedOrganization is null)
+{
+    <div class="status-container">
+        <p class="status-message"><em>Could not load organization data. Please select an organization.</em></p>
+    </div>
+}
+else
+{
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="title">Total users</div>
+            <div class="value">@dashboardData.TotalUsers.ToString("N0")</div>
+        </div>
+        <div class="stat-card">
+            <div class="title">New users today</div>
+            <div class="value">@dashboardData.NewUsersToday.ToString("N0")<span class="change">↑</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="title">New users past 7 days</div>
+            <div class="value">@dashboardData.NewUsersPast7Days.ToString("N0") <span class="change">↑</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="title">New users past 30 days</div>
+            <div class="value">@dashboardData.NewUsersPast30Days.ToString("N0") <span class="change">↑</span></div>
+        </div>
+    </div>
+    <div>
+        <h2 class="text-xl sm:text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Past 30 Days</h2>
+        <ApexChart TItem="UserCount" Options="chartOptions">
+            <ApexPointSeries TItem="UserCount" Items="dashboardData.DailyUserCounts" Name="New Users"
+                SeriesType="SeriesType.Line" XValue="@(e => e.Date)" YValue="@(e => e.Count)" />
+        </ApexChart>
+
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private Dictionary<string, DashboardData> _dashboardDataCache = new();
+    private DashboardData? dashboardData;
+
+    // Model data for the chart
+    public class UserCount
+    {
+        public DateTime Date { get; set; }
+        public int Count { get; set; }
+    }
+    public class DashboardData
+    {
+        public int TotalUsers { get; set; }
+        public int NewUsersToday { get; set; }
+        public int NewUsersPast7Days { get; set; }
+        public int NewUsersPast30Days { get; set; }
+        public List<UserCount> DailyUserCounts { get; set; } = new();
+    }
+
+    private ApexChartOptions<UserCount> chartOptions = new ApexChartOptions<UserCount>
+    {
+        Chart = new Chart
+        {
+            Height = 350,
+            Type = ChartType.Line,
+            Zoom = new Zoom { Enabled = true },
+            Toolbar = new Toolbar { Show = false },
+            DropShadow = new DropShadow
+            {
+                Enabled = true,
+                Color = "#39FF14",
+                Top = 10,
+                Blur = 6,
+                Opacity = 0.3f
+            }
+        },
+        Colors = new List<string> { "#39FF14" },
+        Stroke = new Stroke
+        {
+            Curve = Curve.Smooth,
+            Width = 3
+        },
+        Xaxis = new XAxis
+        {
+            Type = XAxisType.Datetime,
+            Labels = new XAxisLabels { Format = "dd MMM" }
+        },
+        Yaxis = new List<YAxis> {
+new YAxis {
+Title = new AxisTitle { Text = "Number of Registrations" },
+Labels = new YAxisLabels { Formatter = "function(val) { return val.toFixed(0); }" }
+}
+},
+        Tooltip = new Tooltip
+        {
+            X = new TooltipX { Format = "dd MMMM yyyy" }
+        },
+        Grid = new Grid
+        {
+            Row = new GridRow { Opacity = 0.5 },
+            Column = new GridColumn { Opacity = 0.5 }
+        },
+        DataLabels = new DataLabels
+        {
+            Enabled = false
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        AppState.OnChange += HandleStateChange;
+        await LoadDashboardDataAsync();
+    }
+    private async void HandleStateChange()
+    {
+        await LoadDashboardDataAsync();
+    }
+    private async Task LoadDashboardDataAsync()
+    {
+        isLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        var selectedOrgSlug = AppState.SelectedOrganization?.Slug;
+        if (string.IsNullOrEmpty(selectedOrgSlug))
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        // Check local cache
+        if (_dashboardDataCache.TryGetValue(selectedOrgSlug, out var cachedData))
+        {
+            dashboardData = cachedData;
+        }
+        else
+        {
+            await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+            var organization = await dbContext.Organizations
+            .AsNoTracking()
+            .Include(o => o.ManagedByUsers)
+            .FirstOrDefaultAsync(o => o.Slug == selectedOrgSlug);
+
+            if (organization != null)
+            {
+                var today = DateTime.UtcNow.Date;
+                var managedUsers = organization.ManagedByUsers.ToList();
+                managedUsers.AddRange(GenerateTestUsers()); //TODO : Remove this line in production
+
+                var newData = new DashboardData
+                {
+                    TotalUsers = managedUsers.Count,
+                    NewUsersToday = managedUsers.Count(u => u.AddedDate.Date == today),
+                    NewUsersPast7Days = managedUsers.Count(u => u.AddedDate.Date >= today.AddDays(-7)),
+                    NewUsersPast30Days = managedUsers.Count(u => u.AddedDate.Date >= today.AddDays(-30)),
+                    DailyUserCounts = managedUsers
+                .GroupBy(u => u.AddedDate.Date)
+                .Select(group => new UserCount { Date = group.Key, Count = group.Count() })
+                .OrderBy(d => d.Date)
+                .ToList()
+                };
+
+                dashboardData = newData;
+                _dashboardDataCache[selectedOrgSlug] = newData;
+            }
+            else
+            {
+                Logger.LogWarning("Organization with slug '{OrgSlug}' not found.", selectedOrgSlug);
+                dashboardData = null;
+            }
+        }
+
+        isLoading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+    public List<UserOrganizationRole> GenerateTestUsers()
+    {
+        var userRoles = new List<UserOrganizationRole>();
+        var random = new Random();
+        var today = DateTime.Today;
+
+        // We can use one organization ID for all test records.
+        var testOrganizationId = Guid.NewGuid();
+
+        // Create approximately 150 user roles over the last 60 days
+        for (int i = 0; i < 150; i++)
+        {
+            // Generate a random date within the last 60 days
+            int daysAgo = random.Next(0, 60);
+            DateTime registrationDate = today.AddDays(-daysAgo);
+
+            // Add a random hour and minute for more variation
+            registrationDate = registrationDate
+            .AddHours(random.Next(0, 24))
+            .AddMinutes(random.Next(0, 60));
+
+            userRoles.Add(new UserOrganizationRole
+            {
+                UserId = Guid.NewGuid(),
+                OrganizationId = testOrganizationId,
+                Role = "Viewer", // You can randomize this if needed
+                AddedDate = registrationDate
+                // The 'User' and 'Organization' navigation properties are left null,
+                // as they are not needed for the chart data.
+            });
+        }
+
+        return userRoles;
+    }
+    public void Dispose()
+    {
+        AppState.OnChange -= HandleStateChange;
+    }
+}

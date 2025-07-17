@@ -109,13 +109,11 @@ public static class AccountEndpoints
             }
         });
 
-        app.MapPost("/account/logout", async (
-                    SignInManager<ApplicationUser> signInManager,
-                    [FromForm] string returnUrl) =>
-                {
-                    await signInManager.SignOutAsync();
-                    return Results.LocalRedirect($"~/{returnUrl}");
-                }).RequireAuthorization();
+        app.MapPost("/account/logout", async (SignInManager<ApplicationUser> signInManager) =>
+        {
+            await signInManager.SignOutAsync();
+            return Results.Redirect("/");
+        }).RequireAuthorization();
     }
 }
 

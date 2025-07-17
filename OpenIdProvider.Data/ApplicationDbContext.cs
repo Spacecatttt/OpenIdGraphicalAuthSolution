@@ -12,6 +12,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupClaim> GroupClaims { get; set; }
     public DbSet<Organization> Organizations { get; set; }
+    public DbSet<UserOrganizationRole> UserOrganizationRoles { get; set; }
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)

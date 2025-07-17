@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
+using ApexCharts;
+
 using Duende.IdentityModel.Client;
 
 using OpenIdProvider.Blazor.Components;
@@ -88,9 +90,10 @@ builder.Services.AddIdentityServer(options =>
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddAuthorizationCore();
 
-// --- Database and Other Services ---
+// --- Database and My Services ---
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<IOrganizationResolver, OrganizationResolver>();
+builder.Services.AddScoped<AppState>();
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseNpgsql(
@@ -107,6 +110,15 @@ builder.Services.AddScoped(sp =>
     var navigationManager = sp.GetRequiredService<NavigationManager>();
     return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
 });
+
+builder.Services.AddApexCharts(e =>
+            {
+                e.GlobalOptions = new ApexChartBaseOptions
+                {
+                    Debug = true,
+                    Theme = new Theme { Palette = PaletteType.Palette6 }
+                };
+            });
 
 var app = builder.Build();
 

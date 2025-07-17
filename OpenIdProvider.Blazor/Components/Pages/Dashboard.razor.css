@@ -1,0 +1,74 @@
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background-color: var(--secondary-bg);
+    padding: 1.5rem;
+    border-radius: 8px;
+}
+
+.stat-card .title {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.stat-card .value {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.stat-card .change {
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+.chart-container {
+    background-color: var(--bg-color);
+    padding: 1.5rem;
+    border-radius: 8px;
+}
+
+.chart-header h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.8rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.status-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 70vh;
+}
+
+.status-message {
+    font-size: 1.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}

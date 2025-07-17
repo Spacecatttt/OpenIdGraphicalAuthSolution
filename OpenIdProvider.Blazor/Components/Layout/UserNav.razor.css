@@ -1,0 +1,94 @@
+.org-selector {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 6px;
+    max-width: 200px;
+
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+    padding-left: 0.8rem;
+    padding-right: 2.5rem;
+
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.org-selector option {
+    background-color: var(--secondary-bg);
+    color: var(--text-primary);
+}
+
+.icon-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-decoration: none;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 1.2rem;
+}
+
+.profile-container {
+    position: relative;
+    display: inline-block;
+}
+
+.profile {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.profile img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+}
+
+.profile-dropdown {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    background-color: var(--secondary-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 160px;
+    z-index: 1000;
+    padding: 0.5rem 0;
+    display: none;
+}
+
+.profile-dropdown.show {
+    display: block;
+}
+
+.profile-dropdown a,
+.dropdown-item-button {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    transition: background-color 0.2s;
+}
+
+.profile-dropdown a:hover,
+.dropdown-item-button:hover {
+    background-color: var(--accent-active);
+}

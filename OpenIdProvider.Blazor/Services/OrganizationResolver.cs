@@ -19,15 +19,17 @@ public class OrganizationResolver : IOrganizationResolver
         if (user?.Identity?.IsAuthenticated != true)
             return null;
 
-        var primaryOrgIdClaim = user.FindFirst("PrimaryOrganizationId");
-        if (primaryOrgIdClaim == null)
+        var userIdString = user.FindFirstValue("sub");
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out Guid userGuid))
+        {
             return null;
+        }
 
-        if (!Guid.TryParse(primaryOrgIdClaim.Value, out Guid primaryOrgId))
-            return null;
-
-        return await _dbContext.Organizations
+        var appUser = await _dbContext.Users
             .AsNoTracking()
-            .FirstOrDefaultAsync(o => o.Id == primaryOrgId);
+            .Include(u => u.PrimaryOrganization)
+            .FirstOrDefaultAsync(u => u.Id == userGuid);
+
+        return appUser?.PrimaryOrganization;
     }
 }
