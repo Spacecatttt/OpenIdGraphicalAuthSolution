@@ -1,0 +1,196 @@
+@* Два маршрути: один для створення, інший для редагування *@
+@page "/organizations/add"
+@page "/organizations/edit/{Id:guid}"
+
+
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@using System.Text.RegularExpressions
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using OpenIdProvider.Blazor.Services
+
+@inject ILogger<OrganizationAddEdit> Logger
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject NavigationManager NavigationManager
+@inject AppState AppState
+
+<PageTitle>Organization</PageTitle>
+
+@if (isLoading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="form-container">
+        <div class="form-header">
+            <h1>@(IsNew ? "Create New Organization" : "Edit Organization")</h1>
+            <button class="btn btn-secondary flex" @onclick="NavigateBack">
+                <img src="/images/table/back.png" alt="Add" class="btn-icon" />
+                <span>Back to List</span>
+            </button>
+        </div>
+
+        <EditForm Model="organizationModel" OnValidSubmit="HandleSave">
+            <DataAnnotationsValidator />
+
+            <div class="form-grid">
+                <!-- Name -->
+                <div class="form-group">
+                    <label for="name">Organization Name</label>
+                    <InputText id="name" @bind-Value="organizationModel.Name" @oninput="GenerateSlugFromName"
+                        class="form-input" />
+                    <ValidationMessage For="@(() => organizationModel.Name)" />
+                </div>
+
+                <!-- Slug -->
+                <div class="form-group">
+                    <label for="slug">Slug (URL)</label>
+                    <InputText id="slug" @bind-Value="organizationModel.Slug" @oninput="() => slugManuallyEdited = true"
+                        class="form-input" />
+                    <ValidationMessage For="@(() => organizationModel.Slug)" />
+                </div>
+
+                <!-- Description -->
+                <div class="form-group full-width">
+                    <label for="description">Description</label>
+                    <InputTextArea id="description" @bind-Value="organizationModel.Description" class="form-textarea"
+                        rows="4" />
+                </div>
+
+                <!-- IsActive -->
+                <div class="form-group-checkbox full-width">
+                    <InputCheckbox id="isActive" @bind-Value="organizationModel.IsActive" />
+                    <label for="isActive">Organization is Active</label>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="error-message">
+                    @errorMessage
+                </div>
+            }
+
+            <div class="form-footer">
+                <button type="submit" class="btn btn-primary">@(IsNew ? "Create Organization" : "Save Changes")</button>
+                <button type="button" class="btn btn-secondary" @onclick="NavigateBack">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+
+@code {
+    [Parameter]
+    public Guid? Id { get; set; }
+
+    private Organization organizationModel = new();
+    private bool isLoading = true;
+    private bool IsNew => Id == null;
+    private bool slugManuallyEdited = false;
+    private string? errorMessage;
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+
+        if (IsNew)
+        {
+            organizationModel = new Organization { IsActive = true };
+            slugManuallyEdited = false;
+        }
+        else
+        {
+            await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+            var dbOrganization = await dbContext.Organizations.FirstOrDefaultAsync(o => o.Id == Id);
+
+            if (dbOrganization != null)
+            {
+                organizationModel = dbOrganization;
+                slugManuallyEdited = true;
+            }
+            else
+            {
+                Logger.LogError("Organization with ID {Id} not found.", Id);
+                NavigateBack();
+            }
+        }
+
+        isLoading = false;
+    }
+
+    private void GenerateSlugFromName(ChangeEventArgs e)
+    {
+        if (!slugManuallyEdited)
+        {
+            var name = e.Value?.ToString() ?? "";
+            var slug = name.ToLower().Trim();
+            slug = Regex.Replace(slug, @"\s+", "-");
+            slug = Regex.Replace(slug, @"[^a-z0-9-]", "");
+            organizationModel.Slug = slug;
+        }
+    }
+
+    private async Task HandleSave()
+    {
+        errorMessage = null;
+        if (AppState.CurrentUser == null)
+        {
+            errorMessage = "Error: User is not authenticated.";
+            Logger.LogError("Cannot save organization, user is not authenticated.");
+            return;
+        }
+
+        await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+
+        var slugExists = await dbContext.Organizations
+        .AnyAsync(o => o.Slug == organizationModel.Slug && o.Id != organizationModel.Id);
+
+        if (slugExists)
+        {
+            errorMessage = $"Error: The slug '{organizationModel.Slug}' is already in use. Please choose a different one.";
+            return;
+        }
+        try
+        {
+            if (IsNew)
+            {
+                organizationModel.CreatedDate = DateTime.UtcNow;
+                organizationModel.ModifiedDate = DateTime.UtcNow;
+
+                dbContext.Organizations.Add(organizationModel);
+
+                var userRole = new UserOrganizationRole
+                {
+                    UserId = AppState.CurrentUser.Id,
+                    OrganizationId = organizationModel.Id,
+                    Role = "Owner"
+                };
+                dbContext.UserOrganizationRoles.Add(userRole);
+
+                Logger.LogInformation("Creating new organization '{Name}'.", organizationModel.Name);
+            }
+            else
+            {
+                organizationModel.ModifiedDate = DateTime.UtcNow;
+                dbContext.Organizations.Update(organizationModel);
+                Logger.LogInformation("Updating organization {Id}.", organizationModel.Id);
+            }
+
+            await dbContext.SaveChangesAsync();
+            await AppState.InitializeAsync(true);
+            NavigateBack();
+        }
+        catch (DbUpdateException ex)
+        {
+            Logger.LogError(ex, "An error occurred while saving the organization.");
+            errorMessage = "A database error occurred.";
+        }
+    }
+
+    private void NavigateBack()
+    {
+        NavigationManager.NavigateTo("/organizations");
+    }
+}

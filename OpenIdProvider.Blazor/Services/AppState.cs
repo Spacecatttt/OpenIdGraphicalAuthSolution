@@ -26,9 +26,9 @@ public class AppState : IDisposable
         _authenticationStateProvider = authenticationStateProvider;
     }
 
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(bool forceRefresh = false)
     {
-        if (_isInitialized) return;
+        if (_isInitialized && !forceRefresh) return;
 
         var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
@@ -39,7 +39,11 @@ public class AppState : IDisposable
             if (CurrentUser != null)
             {
                 await LoadUserOrganizationsAsync(CurrentUser);
-                SelectedOrganization = CurrentUser.PrimaryOrganization ?? UserOrganizations.FirstOrDefault();
+                var currentSlug = SelectedOrganization?.Slug;
+                if (currentSlug == null || !UserOrganizations.Any(o => o.Slug == currentSlug))
+                {
+                    SelectedOrganization = CurrentUser.PrimaryOrganization ?? UserOrganizations.FirstOrDefault();
+                }
             }
         }
         _isInitialized = true;
