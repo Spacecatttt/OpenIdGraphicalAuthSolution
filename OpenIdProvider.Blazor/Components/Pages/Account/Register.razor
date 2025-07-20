@@ -1,37 +1,31 @@
 @page "/account/register"
 @layout DefaultLayout
 @attribute [AllowAnonymous]
+@attribute [StreamRendering]
 @rendermode InteractiveServer
 
 @using System.ComponentModel.DataAnnotations
-@using System.Security.Claims
 @using System.Text.RegularExpressions
-@using Microsoft.AspNetCore.Identity
-@using Microsoft.EntityFrameworkCore
-@using OpenIdProvider.Data
 @using OpenIdProvider.Data.Models
 @using OpenIdProvider.Blazor.Endpoints
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
 
 @inject HttpClient Http
-@inject NavigationManager NavigationManager
 @inject ILogger<Register> Logger
-
 
 <PageTitle>Sign Up</PageTitle>
 
 <div class="container-1">
     <div class="container-2">
-        <EditForm EditContext="editContext" OnValidSubmit="HandleFinalSubmit">
-            <ValidationSummary class="text-danger mb-3" role="alert" />
-            @if (!string.IsNullOrEmpty(generalErrorMessage))
-            {
-                <div class="alert alert-danger">@generalErrorMessage</div>
-            }
-
-            @if (currentStep == Step.UserDetails)
-            {
+        @if (currentStep == Step.UserDetails)
+        {
+            <EditForm EditContext="editContext" OnValidSubmit="() => {}">
                 <h3>Sign up</h3>
-
+                @if (!string.IsNullOrEmpty(generalErrorMessage))
+                {
+                    <div class="alert alert-danger">@generalErrorMessage</div>
+                }
                 <div class="form-floating mb-2">
                     <InputText @bind-Value="Input.User.UserName" class="form-control"
                         placeholder="Enter your username..." />
@@ -66,7 +60,7 @@
                 <button type="button" class="btn-success" @onclick="GoToOrganizationStep" disabled="@isProcessing">
                     @if (isProcessing)
                     {
-                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span class="spinner-border spinner-border-sm"></span>
                     }
                     else
                     {
@@ -74,192 +68,168 @@
                         @("Next step")
                     }
                 </button>
-            }
-            else if (currentStep == Step.OrgDetails)
-            {
+            </EditForm>
+        }
+        else if (currentStep == Step.OrgDetails)
+        {
+            <form method="post" action="/account/register">
+                <AntiforgeryToken />
                 <h3>Create Your First Organization</h3>
 
+                @if (!string.IsNullOrEmpty(generalErrorMessage))
+                {
+                    <div class="alert alert-danger">@generalErrorMessage</div>
+                }
+
+                <input type="hidden" name="User.UserName" value="@Input.User.UserName" />
+                <input type="hidden" name="User.DisplayName" value="@Input.User.DisplayName" />
+                <input type="hidden" name="User.Email" value="@Input.User.Email" />
+                <input type="hidden" name="User.Password" value="@Input.User.Password" />
+                <input type="hidden" name="User.ConfirmPassword" value="@Input.User.ConfirmPassword" />
+
                 <div class="form-floating mb-2">
-                    <InputText @bind-Value="Input.Organization.Name" @oninput="UpdateSlug" class="form-control"
-                        placeholder="Enter organization name..." />
+                    <input name="Organization.Name" value="@Input.Organization.Name" @oninput="UpdateSlugFromName"
+                        class="form-control" placeholder="Enter organization name..." />
                     <label class="form-label">Organization Name</label>
-                    <ValidationMessage For="() => Input.Organization.Name" class="text-danger" />
                 </div>
                 <div class="form-floating mb-2">
-                    <InputTextArea @bind-Value="Input.Organization.Description" class="form-control"
-                        placeholder="Enter description..." style="height: 6rem;" />
+                    <textarea name="Organization.Description"
+                    @onchange="(e) => Input.Organization.Description = e.Value?.ToString() ?? string.Empty"
+                    class="form-control" placeholder="Enter description..."
+                    style="height: 6rem;">@Input.Organization.Description</textarea>
                     <label class="form-label">Description</label>
-                    <ValidationMessage For="() => Input.Organization.Description" class="text-danger" />
                 </div>
                 <div class="form-floating mb-2">
-                    <InputText @bind-Value="Input.Organization.Slug" @oninput="() => slugManuallyEdited = true"
+                    <input name="Organization.Slug" value="@Input.Organization.Slug" @oninput="UpdateSlugManually"
                         class="form-control" placeholder="Enter slug..." />
                     <label class="form-label">Slug</label>
-                    <ValidationMessage For="() => Input.Organization.Slug" class="text-danger" />
                 </div>
 
-                <button type="submit" class="btn-success" disabled="@isProcessing">
-                    @if (isProcessing)
-                    {
-                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                    }
-                    else
-                    {
-
-                        @("Create Organization & Finish")
-                    }
+                <button type="submit" class="btn-success">
+                    Create Account & Organization
                 </button>
-            }
-        </EditForm>
+            </form>
 
-        <div class="container-inline">
-            @if (currentStep == Step.OrgDetails)
-            {
+            <div class="container-inline mt-3">
                 <p>Want to go back?</p>
                 <button type="button" class="link-style-button" @onclick="GoToUserStep">
                     Back to user details
                 </button>
-            }
-            else
-            {
+            </div>
+        }
+
+        @if (currentStep == Step.UserDetails)
+        {
+            <div class="container-inline">
                 <p>Already registered?</p>
                 <a href="/account/login">Sign in</a>
-            }
-        </div>
+            </div>
+        }
     </div>
     <div class="container-3">
-        <img src="/images/mountainsSignUp.png" alt="Mountains illustration" />
+        <img src="/images/mountainsSignUp.png" alt="Mountains" />
     </div>
 </div>
 
 @code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? PostSubmitError { get; set; }
+
     private enum Step { UserDetails, OrgDetails }
     private Step currentStep = Step.UserDetails;
-    private bool slugManuallyEdited = false;
     private bool isProcessing = false;
-    private string? generalErrorMessage;
+    private bool slugManuallyEdited = false;
 
+    private string? generalErrorMessage;
     private EditContext editContext = default!;
     private ValidationMessageStore messageStore = default!;
+
     private RegistrationInputModel Input { get; set; } = new();
 
     protected override void OnInitialized()
     {
         editContext = new(Input);
         messageStore = new(editContext);
-    }
 
-    private async Task GoToOrganizationStep()
-    {
-        isProcessing = true;
-        messageStore.Clear();
-        generalErrorMessage = null;
-
-        editContext.Validate();
-
-        if (editContext.GetValidationMessages(() => Input.User).Any())
+        if (!string.IsNullOrEmpty(PostSubmitError))
         {
-            isProcessing = false;
-            return;
-        }
-
-        try
-        {
-            // Call the validation endpoint on the backend
-            var response = await Http.PostAsJsonAsync("/account/validate-user-step", Input.User);
-
-            if (response.IsSuccessStatusCode)
-            {
-                currentStep = Step.OrgDetails;
-            }
-            else
-            {
-                var problemDetails = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
-                if (problemDetails?.Errors != null)
-                {
-                    foreach (var error in problemDetails.Errors)
-                    {
-                        var fieldIdentifier = new FieldIdentifier(Input.User, error.Key);
-                        messageStore.Add(fieldIdentifier, error.Value);
-                    }
-                }
-                else
-                {
-                    generalErrorMessage = "An unknown validation error occurred.";
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error calling the user validation endpoint.");
-            generalErrorMessage = "A network error occurred. Please try again.";
-        }
-        finally
-        {
-            isProcessing = false;
+            generalErrorMessage = PostSubmitError;
+            currentStep = Step.OrgDetails;
         }
     }
-
-    private void GoToUserStep()
+    private void UpdateSlugFromName(ChangeEventArgs e)
     {
-        currentStep = Step.UserDetails;
-        messageStore.Clear();
-        generalErrorMessage = null;
-    }
-
-    private void UpdateSlug(ChangeEventArgs e)
-    {
+        Input.Organization.Name = e.Value?.ToString() ?? string.Empty;
         if (!slugManuallyEdited)
         {
-            var name = e.Value?.ToString() ?? "";
+            var name = Input.Organization.Name;
             var slug = name.ToLower().Trim().Replace(" ", "-");
             slug = Regex.Replace(slug, @"[^a-z0-9-]", "");
             Input.Organization.Slug = slug;
         }
     }
-
-    private async Task HandleFinalSubmit()
+    private void UpdateSlugManually(ChangeEventArgs e)
+    {
+        slugManuallyEdited = true;
+        Input.Organization.Slug = e.Value?.ToString() ?? string.Empty;
+    }
+    private async Task GoToOrganizationStep()
     {
         isProcessing = true;
-        messageStore.Clear();
         generalErrorMessage = null;
+        messageStore.Clear();
 
-        if (!editContext.Validate())
+        var validationContext = new ValidationContext(Input.User);
+        var validationResults = new List<ValidationResult>();
+        bool isUserStepValid = Validator.TryValidateObject(Input.User, validationContext, validationResults,
+        validateAllProperties: true);
+
+        if (!isUserStepValid)
         {
+            foreach (var result in validationResults)
+            {
+                if (result.MemberNames.Any())
+                {
+                    var fieldIdentifier = new FieldIdentifier(Input.User, result.MemberNames.First());
+                    messageStore.Add(fieldIdentifier, result.ErrorMessage ?? "Validation error");
+                }
+            }
             isProcessing = false;
+            editContext.NotifyValidationStateChanged();
             return;
         }
 
-        try
+        var response = await Http.PostAsJsonAsync("/account/validate-user-step", Input.User);
+        if (response.IsSuccessStatusCode)
         {
-            // Sending data to our backend endpoint
-            var response = await Http.PostAsJsonAsync("/account/register", Input);
-            if (response.IsSuccessStatusCode)
+            currentStep = Step.OrgDetails;
+        }
+        else
+        {
+            var problemDetails = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+            if (problemDetails?.Errors != null)
             {
-                NavigationManager.NavigateTo("/", forceLoad: true);
+                foreach (var error in problemDetails.Errors)
+                {
+                    var fieldIdentifier = new FieldIdentifier(Input.User, error.Key);
+                    messageStore.Add(fieldIdentifier, error.Value);
+                }
             }
             else
             {
-                generalErrorMessage = "Please correct the errors and try again.";
-                var problemDetails = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
-
-                if (problemDetails?.Errors != null)
-                {
-                    foreach (var error in problemDetails.Errors)
-                    {
-                        messageStore.Add(new FieldIdentifier(Input, string.Empty), error.Value.First());
-                    }
-                }
+                generalErrorMessage = "An unknown validation error occurred.";
             }
         }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error calling the registration endpoint.");
-            generalErrorMessage = "A network error occurred. Please try again later.";
-        }
-        finally
-        {
-            isProcessing = false;
-        }
+        isProcessing = false;
+        editContext.NotifyValidationStateChanged();
+    }
+    private void GoToUserStep()
+    {
+        currentStep = Step.UserDetails;
+        generalErrorMessage = null;
+        slugManuallyEdited = false;
+        messageStore.Clear();
+        editContext.NotifyValidationStateChanged();
     }
 }

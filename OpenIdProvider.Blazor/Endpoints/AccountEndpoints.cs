@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using System.Net;
 using System.Security.Claims;
+using System.Text.Json;
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -16,56 +18,81 @@ public static class AccountEndpoints
     {
 
         app.MapPost("/account/validate-user-step", async (
-            UserInputModel input,
+            [FromBody] UserInputModel userInput,
             UserManager<ApplicationUser> userManager) =>
         {
-            var errors = new Dictionary<string, string[]>();
-
-            // Check if username exists
-            if (await userManager.FindByNameAsync(input.UserName) != null)
+            var validationContext = new ValidationContext(userInput);
+            var validationResults = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(userInput, validationContext, validationResults, true))
             {
-                errors.Add(nameof(input.UserName), new[] { "A user with this username already exists." });
+                return Results.ValidationProblem(validationResults.ToDictionary(
+                    vr => vr.MemberNames.FirstOrDefault() ?? string.Empty,
+                    vr => vr.ErrorMessage is not null ? new[] { vr.ErrorMessage } : Array.Empty<string>()
+                ));
             }
 
-            // Check if email exists
-            if (await userManager.FindByEmailAsync(input.Email) != null)
+            var customErrors = new Dictionary<string, string[]>();
+            if (await userManager.FindByNameAsync(userInput.UserName) != null)
             {
-                errors.Add(nameof(input.Email), new[] { "A user with this email address already exists." });
+                customErrors.Add(nameof(UserInputModel.UserName), new[] { "A user with this username already exists." });
+            }
+            if (await userManager.FindByEmailAsync(userInput.Email) != null)
+            {
+                customErrors.Add(nameof(UserInputModel.Email), new[] { "A user with this email address already exists." });
             }
 
-            // Validate password policies
-            var tempUser = new ApplicationUser { UserName = input.UserName, Email = input.Email };
+            var dummyUser = new ApplicationUser
+            {
+                UserName = userInput.UserName,
+                Email = userInput.Email
+            };
+
             foreach (var validator in userManager.PasswordValidators)
             {
-                var result = await validator.ValidateAsync(userManager, tempUser, input.Password);
+                var result = await validator.ValidateAsync(userManager, dummyUser, userInput.Password);
                 if (!result.Succeeded)
                 {
-                    errors.Add(nameof(input.Password), result.Errors.Select(e => e.Description).ToArray());
+                    customErrors.Add(nameof(UserInputModel.Password), result.Errors.Select(e => e.Description).ToArray());
+                    break;
                 }
             }
 
-            if (errors.Any())
-            {
-                return Results.ValidationProblem(errors);
-            }
+            if (customErrors.Count > 0)
+                return Results.ValidationProblem(customErrors);
 
             return Results.Ok();
         });
 
         app.MapPost("/account/register", async (
-            RegistrationInputModel input,
-            HttpContext httpContext,
+            [FromForm] RegistrationInputModel input,
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
             ApplicationDbContext dbContext,
             ILogger<Program> logger) =>
         {
-            if (input is null) return Results.BadRequest("Input is required.");
+            var allValidationResults = new List<ValidationResult>();
+            var userValidationContext = new ValidationContext(input.User);
+            Validator.TryValidateObject(input.User, userValidationContext, allValidationResults, true);
+            var orgValidationContext = new ValidationContext(input.Organization);
+            Validator.TryValidateObject(input.Organization, orgValidationContext, allValidationResults, true);
+
+            if (allValidationResults.Count > 0)
+            {
+                var errorMessage = string.Join(" ", allValidationResults.Select(v => v.ErrorMessage));
+                var encodedError = WebUtility.UrlEncode(errorMessage);
+                return Results.Redirect($"/account/register?postSubmitError={encodedError}");
+            }
+
+            if (await dbContext.Organizations.AnyAsync(o => o.Slug == input.Organization.Slug))
+            {
+                var errorMessage = "An organization with that slug already exists. Please choose a different name or edit the slug.";
+                var encodedError = WebUtility.UrlEncode(errorMessage);
+                return Results.Redirect($"/account/register?postSubmitError={encodedError}");
+            }
 
             await using var transaction = await dbContext.Database.BeginTransactionAsync();
             try
             {
-                // Create Organization
                 var organization = new Organization
                 {
                     Name = input.Organization.Name,
@@ -76,7 +103,6 @@ public static class AccountEndpoints
                 dbContext.Organizations.Add(organization);
                 await dbContext.SaveChangesAsync();
 
-                // Create User
                 var user = new ApplicationUser
                 {
                     UserName = input.User.UserName,
@@ -88,24 +114,24 @@ public static class AccountEndpoints
 
                 if (result.Succeeded)
                 {
-                    logger.LogInformation("User created a new account.");
                     await transaction.CommitAsync();
-
-                    // Sign In
                     await signInManager.SignInAsync(user, isPersistent: false);
-                    return Results.Ok();
+                    return Results.Redirect("/");
                 }
                 else
                 {
                     await transaction.RollbackAsync();
-                    return Results.ValidationProblem(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
+                    var errorMessage = string.Join(" ", result.Errors.Select(e => e.Description));
+                    var encodedError = WebUtility.UrlEncode(errorMessage);
+                    return Results.Redirect($"/account/register?postSubmitError={encodedError}");
                 }
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Exception during registration endpoint.");
+                logger.LogError(ex, "Error during registration. Input: {@Input}", input);
                 await transaction.RollbackAsync();
-                return Results.Problem("An unexpected error occurred during registration.");
+                var encodedError = WebUtility.UrlEncode("An unexpected server error occurred. Please try again.");
+                return Results.Redirect($"/account/register?postSubmitError={encodedError}");
             }
         });
 
@@ -120,17 +146,25 @@ public static class AccountEndpoints
 public class RegistrationInputModel
 {
     public UserInputModel User { get; set; } = new();
-    public OrgInputModel Organization { get; set; } = new();
+    public OrganizationInputModel Organization { get; set; } = new();
 }
 public class UserInputModel
 {
-    [Required(ErrorMessage = "Username is required.")] public string UserName { get; set; } = "";
-    [Required(ErrorMessage = "Display name is required.")] public string DisplayName { get; set; } = "";
-    [Required(ErrorMessage = "Email is required."), EmailAddress] public string Email { get; set; } = "";
-    [Required, DataType(DataType.Password), StringLength(100, MinimumLength = 6)] public string Password { get; set; } = "";
-    [DataType(DataType.Password), Compare(nameof(Password))] public string ConfirmPassword { get; set; } = "";
+    [Required(ErrorMessage = "Username is required.")]
+    public string UserName { get; set; } = "";
+    [Required(ErrorMessage = "Display name is required.")]
+    public string DisplayName { get; set; } = "";
+    [Required(ErrorMessage = "Email is required."), EmailAddress]
+    public string Email { get; set; } = "";
+
+    [Required(ErrorMessage = "Password is required.")]
+    [DataType(DataType.Password)]
+    [MinLength(6, ErrorMessage = "Password must be at least 6 characters long.")]
+    public string Password { get; set; } = "";
+    [DataType(DataType.Password), Compare(nameof(Password))]
+    public string ConfirmPassword { get; set; } = "";
 }
-public class OrgInputModel
+public class OrganizationInputModel
 {
     [Required] public string Name { get; set; } = "";
     public string? Description { get; set; }

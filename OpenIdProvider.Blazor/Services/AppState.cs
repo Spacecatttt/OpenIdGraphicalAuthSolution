@@ -7,6 +7,7 @@ using OpenIdProvider.Data.Models;
 
 public class AppState : IDisposable
 {
+    public bool IsLightTheme { get; private set; } = true;
     private readonly IDbContextFactory<ApplicationDbContext> _dbContextFactory;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly AuthenticationStateProvider _authenticationStateProvider;
@@ -19,7 +20,9 @@ public class AppState : IDisposable
     public event Action? OnChange;
     private bool _isInitialized = false;
 
-    public AppState(IDbContextFactory<ApplicationDbContext> dbContextFactory, UserManager<ApplicationUser> userManager, AuthenticationStateProvider authenticationStateProvider)
+    public AppState(IDbContextFactory<ApplicationDbContext> dbContextFactory,
+     UserManager<ApplicationUser> userManager,
+     AuthenticationStateProvider authenticationStateProvider)
     {
         _dbContextFactory = dbContextFactory;
         _userManager = userManager;
@@ -48,6 +51,17 @@ public class AppState : IDisposable
         }
         _isInitialized = true;
         NotifyStateChanged();
+    }
+
+
+    // Called by the [JSInvokable] method in UserNav.razor
+    public void SetTheme(bool isLight)
+    {
+        if (IsLightTheme != isLight)
+        {
+            IsLightTheme = isLight;
+            NotifyStateChanged();
+        }
     }
 
     private async Task LoadUserOrganizationsAsync(ApplicationUser user)

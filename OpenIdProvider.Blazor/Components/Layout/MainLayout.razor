@@ -1,6 +1,5 @@
 ﻿@inherits LayoutComponentBase
 @inject NavigationManager NavigationManager
-@inject AppState AppState
 
 <div class="page">
     <header>
@@ -40,16 +39,3 @@
         </main>
     </div>
 </div>
-
-@code {
-    protected override async Task OnInitializedAsync()
-    {
-        // Subscribe to location changes to update the OrgSlug for the nav links
-        AppState.OnChange += StateHasChanged;
-        await AppState.InitializeAsync();
-    }
-    public void Dispose()
-    {
-        AppState.OnChange -= StateHasChanged;
-    }
-}

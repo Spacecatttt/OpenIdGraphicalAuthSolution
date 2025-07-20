@@ -1,3 +1,5 @@
+@rendermode InteractiveServer
+
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @using OpenIdProvider.Data
@@ -12,6 +14,7 @@
 @inject IJSRuntime JSRuntime
 @inject AppState AppState
 
+@implements IDisposable
 
 @if (AppState.CurrentUser != null)
 {
@@ -26,7 +29,7 @@
     </select>
 
     <a @onclick="ToggleTheme" class="icon-btn" id="theme-toggle" title="Toggle theme">
-        @(isLightTheme ? "☀️" : "🌙")
+        @(AppState.IsLightTheme ? "☀️" : "🌙")
     </a>
 
     <div class="profile-container">
@@ -55,25 +58,27 @@ else
 @code {
 
     private bool isProfileDropdownVisible = false;
-    private bool isLightTheme = true;
-    private bool jsInitialized = false;
+    private DotNetObjectReference<UserNav> objRef;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         AppState.OnChange += StateHasChanged;
-        // Initialize and set the theme from localStorage
-        //await JSRuntime.InvokeVoidAsync("themeInterop.initialize");
-        //isLightTheme = await JSRuntime.InvokeAsync<bool>("themeInterop.isLight");
+        await AppState.InitializeAsync();
     }
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !jsInitialized)
+        if (firstRender)
         {
-            jsInitialized = true;
-            await JSRuntime.InvokeVoidAsync("themeInterop.initialize");
-            isLightTheme = await JSRuntime.InvokeAsync<bool>("themeInterop.isLight");
-            StateHasChanged();
+            objRef = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("themeInterop.setDotNetHelper", objRef);
+        }
+    }
+    [JSInvokable]
+    public void UpdateThemeState(bool isLight)
+    {
+        if (AppState.IsLightTheme != isLight)
+        {
+            AppState.SetTheme(isLight);
         }
     }
 
@@ -94,11 +99,10 @@ else
     private async Task ToggleTheme()
     {
         await JSRuntime.InvokeVoidAsync("themeInterop.toggle");
-        isLightTheme = !isLightTheme;
     }
-
     public void Dispose()
     {
         AppState.OnChange -= StateHasChanged;
+        objRef?.Dispose();
     }
 }

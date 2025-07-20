@@ -38,12 +38,7 @@ var migrationsAssembly = typeof(ApplicationDbContext).Assembly.GetName().Name;
 // --- Authentication & Authorization Configuration ---
 
 // Add authentication and authorization for application
-builder.Services.AddAuthorization(options =>
-{
-    options.FallbackPolicy = new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser()
-        .Build();
-});
+builder.Services.AddAuthorization();
 
 // ASP.NET Core Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
@@ -167,8 +162,7 @@ app.UseAntiforgery();
 // ---Endpoint Mapping-- -
 app.MapRazorPages();
 // Map Blazor components for your main application
-app.MapRazorComponents<App>()
-   .AddInteractiveServerRenderMode();
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.MapAccountEndpoints();
 
