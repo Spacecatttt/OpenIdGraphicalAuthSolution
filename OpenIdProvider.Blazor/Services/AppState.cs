@@ -34,23 +34,44 @@ public class AppState : IDisposable
         if (_isInitialized && !forceRefresh) return;
 
         var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        var userPrincipal = authState.User;
 
-        if (user.Identity?.IsAuthenticated ?? false)
+        if (userPrincipal.Identity?.IsAuthenticated ?? false)
         {
-            CurrentUser = await _userManager.GetUserAsync(user);
-            if (CurrentUser != null)
+            var userId = _userManager.GetUserId(userPrincipal);
+            if (userId != null)
             {
-                await LoadUserOrganizationsAsync(CurrentUser);
-                var currentSlug = SelectedOrganization?.Slug;
-                if (currentSlug == null || !UserOrganizations.Any(o => o.Slug == currentSlug))
+                await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+
+                var userWithData = await dbContext.Users
+                    .Include(u => u.PrimaryOrganization)
+                    .Include(u => u.ManagedOrganizations)
+                        .ThenInclude(mo => mo.Organization)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+
+                if (userWithData != null)
                 {
-                    SelectedOrganization = CurrentUser.PrimaryOrganization ?? UserOrganizations.FirstOrDefault();
+                    CurrentUser = userWithData;
+
+                    var orgs = new List<Organization>();
+                    if (userWithData.PrimaryOrganization != null)
+                    {
+                        orgs.Add(userWithData.PrimaryOrganization);
+                    }
+                    orgs.AddRange(userWithData.ManagedOrganizations.Select(mo => mo.Organization));
+                    UserOrganizations = orgs.DistinctBy(o => o.Id).ToList();
+
+                    var currentSlug = SelectedOrganization?.Slug;
+                    if (currentSlug == null || !UserOrganizations.Any(o => o.Slug == currentSlug))
+                    {
+                        SelectedOrganization = userWithData.PrimaryOrganization ?? UserOrganizations.FirstOrDefault();
+                    }
                 }
             }
+            _isInitialized = true;
+            NotifyStateChanged();
         }
-        _isInitialized = true;
-        NotifyStateChanged();
     }
 
 
@@ -62,26 +83,6 @@ public class AppState : IDisposable
             IsLightTheme = isLight;
             NotifyStateChanged();
         }
-    }
-
-    private async Task LoadUserOrganizationsAsync(ApplicationUser user)
-    {
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
-        var userWithOrgs = await dbContext.Users
-            .Include(u => u.PrimaryOrganization)
-            .Include(u => u.ManagedOrganizations).ThenInclude(mo => mo.Organization)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == user.Id);
-
-        if (userWithOrgs == null) return;
-
-        var orgs = new List<Organization>();
-        if (userWithOrgs.PrimaryOrganization != null)
-        {
-            orgs.Add(userWithOrgs.PrimaryOrganization);
-        }
-        orgs.AddRange(userWithOrgs.ManagedOrganizations.Select(mo => mo.Organization));
-        UserOrganizations = orgs.DistinctBy(o => o.Id).ToList();
     }
 
     public void SetSelectedOrganization(string orgSlug)

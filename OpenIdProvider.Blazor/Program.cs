@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -95,6 +96,16 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
         connectionString,
         sqlOptions => sqlOptions.MigrationsAssembly(migrationsAssembly))
            .UseLazyLoadingProxies());
+
+//
+var keysPath = Environment.GetEnvironmentVariable("DATAPROTECTION_KEYS_PATH");
+if (string.IsNullOrEmpty(keysPath))
+{
+    // if not exist path -> create it
+    keysPath = Path.Combine(builder.Environment.ContentRootPath, "dp_keys");
+}
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 
 // Add support for Razor Pages (for IdentityServer UI)
 builder.Services.AddRazorPages();
