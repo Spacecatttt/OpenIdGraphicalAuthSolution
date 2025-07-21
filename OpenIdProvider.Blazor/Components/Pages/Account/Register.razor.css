@@ -57,8 +57,15 @@ img {
     background-color: #a2a1a1;
 }
 
-.form-control {
-    height: 50px;
+.form-floating ::deep .form-control {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.form-floating > label {
+    color: var(--text-secondary);
 }
 
 .btn-success {
@@ -83,10 +90,16 @@ img {
     text-align: center;
 }
 
-.container-inline p,
+.container-inline p {
+    display: inline;
+    color: var(--text-secondary);
+    margin-right: 10px;
+    font-size: 16px;
+}
+
 .container-inline a {
     display: inline;
-    color: #2f2f2f;
+    color: var(--accent-purple);
     margin-right: 10px;
     font-size: 16px;
 }
