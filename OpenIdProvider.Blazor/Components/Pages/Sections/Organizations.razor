@@ -1,4 +1,5 @@
 @page "/organizations"
+@attribute [Authorize]
 @rendermode InteractiveServer
 
 @using Microsoft.EntityFrameworkCore
@@ -87,9 +88,10 @@ else
                             </td>
                             <td colspan="2">
                                 <div class="action-btn-group">
-                                    <button @onclick='() => GoToGroupsPage(org.Id)'
+                                    <button @onclick='() => GoToGroupsPage(org.Slug)'
                                         class="action-btn btn-manage">Groups</button>
-                                    <button @onclick='() => GoToUsersPage(org.Id)' class="action-btn btn-manage">Users</button>
+                                    <button @onclick='() => GoToUsersPage(org.Slug)'
+                                        class="action-btn btn-manage">Users</button>
                                     <button @onclick='() => GoToEditPage(org.Id)' class="action-btn btn-edit">Edit</button>
                                     <button @onclick='() => DeleteOrganization(org.Id, org.Name)'
                                         class="action-btn btn-delete">Delete</button>
@@ -300,8 +302,17 @@ else
     // Navigation and Actions
     private void GoToAddPage() => NavigationManager.NavigateTo("/organizations/add");
     private void GoToEditPage(Guid id) => NavigationManager.NavigateTo($"/organizations/edit/{id}");
-    private void GoToGroupsPage(Guid id) => NavigationManager.NavigateTo($"/organizations/{id}/groups");
-    private void GoToUsersPage(Guid id) => NavigationManager.NavigateTo($"/organizations/{id}/users");
+    private void GoToGroupsPage(string slug)
+    {
+        AppState.SetSelectedOrganization(slug);
+        NavigationManager.NavigateTo("/groups");
+    }
+
+    private void GoToUsersPage(string slug)
+    {
+        AppState.SetSelectedOrganization(slug);
+        NavigationManager.NavigateTo("/users");
+    }
 
     private async Task DeleteOrganization(Guid id, string name)
     {

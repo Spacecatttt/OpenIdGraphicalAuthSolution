@@ -1,0 +1,143 @@
+@page "/groups/add"
+@page "/groups/edit/{GroupId:guid}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using System.ComponentModel.DataAnnotations
+
+@inject ILogger<GroupAddEdit> Logger
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject NavigationManager NavigationManager
+@inject AppState AppState
+
+<PageTitle>Group</PageTitle>
+
+@if (isLoading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="form-container">
+        <div class="form-header">
+            <h1>@(IsNew ? "Create New Group" : "Edit Group")</h1>
+            <button class="btn btn-secondary" @onclick="NavigateBack">
+                <img src="/images/table/back.png" alt="Back" class="btn-icon" />
+                <span>Back to Groups</span>
+            </button>
+        </div>
+
+        <EditForm Model="groupModel" OnValidSubmit="HandleSave">
+            <DataAnnotationsValidator />
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="name">Group Name</label>
+                    <InputText id="name" @bind-Value="groupModel.Name" class="form-input" />
+                    <ValidationMessage For="@(() => groupModel.Name)" />
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <InputTextArea id="description" @bind-Value="groupModel.Description" class="form-textarea" rows="4" />
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="error-message">@errorMessage</div>
+            }
+
+            <div class="form-footer">
+                <button type="submit" class="btn btn-primary">@(IsNew ? "Create Group" : "Save Changes")</button>
+                <button type="button" class="btn btn-secondary" @onclick="NavigateBack">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string OrgSlug { get; set; } = string.Empty;
+
+    [Parameter]
+    public Guid? GroupId { get; set; }
+
+    private Group groupModel = new();
+    private Guid organizationId;
+    private bool isLoading = true;
+    private bool IsNew => GroupId == null;
+    private string? errorMessage;
+    protected override async Task OnInitializedAsync()
+    {
+        if (AppState.SelectedOrganization == null)
+        {
+            errorMessage = "Parent organization not found.";
+            isLoading = false;
+            return;
+        }
+
+        organizationId = AppState.SelectedOrganization.Id;
+
+        if (IsNew)
+        {
+            groupModel = new Group();
+        }
+        else
+        {
+            await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+            var dbGroup = await dbContext.Groups.FirstOrDefaultAsync(g => g.Id == GroupId && g.OrganizationId == organizationId);
+            if (dbGroup != null)
+            {
+                groupModel = dbGroup;
+            }
+            else
+            {
+                errorMessage = "Group not found.";
+            }
+        }
+        isLoading = false;
+    }
+
+    private async Task HandleSave()
+    {
+        errorMessage = null;
+        await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+
+        var nameExists = await dbContext.Groups
+        .AnyAsync(g => g.Name == groupModel.Name && g.OrganizationId == organizationId && g.Id != groupModel.Id);
+        if (nameExists)
+        {
+            errorMessage = $"A group with the name '{groupModel.Name}' already exists in this organization.";
+            return;
+        }
+
+        try
+        {
+            if (IsNew)
+            {
+                groupModel.OrganizationId = organizationId;
+                dbContext.Groups.Add(groupModel);
+            }
+            else
+            {
+                dbContext.Groups.Update(groupModel);
+            }
+            await dbContext.SaveChangesAsync();
+            NavigateBack();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An error occurred while saving the group.";
+            Logger.LogError(ex, "Error saving group.");
+        }
+    }
+
+    private void NavigateBack()
+    {
+        NavigationManager.NavigateTo($"/groups");
+    }
+}

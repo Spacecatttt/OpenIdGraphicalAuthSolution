@@ -1,6 +1,6 @@
-@* Two routes: one for creation, one for editing *@
 @page "/organizations/add"
 @page "/organizations/edit/{Id:guid}"
+@attribute [Authorize]
 @rendermode InteractiveServer
 
 @using Microsoft.EntityFrameworkCore
