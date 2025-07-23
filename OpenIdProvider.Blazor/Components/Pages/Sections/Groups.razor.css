@@ -1,3 +1,6 @@
+/* Page Layout & Structure  */
+
+/* The main container for the page content */
 .page-container {
     background-color: var(--secondary-bg);
     border: 1px solid var(--border-color);
@@ -7,6 +10,7 @@
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
 }
 
+/* Header section of the page, containing the title and actions */
 .page-header {
     display: flex;
     justify-content: space-between;
@@ -21,32 +25,39 @@
     margin: 0;
 }
 
+/* Footer of the page, typically for pagination */
+.page-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1.5rem;
+    margin-left: 0.75rem;
+    margin-right: 0.2rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+
+/* Table Styles  */
+
+/* A wrapper to allow horizontal scrolling on smaller screens */
 .table-wrapper {
     overflow-x: auto;
     border-radius: 0.5rem;
     border: 1px solid var(--border-color);
 }
 
+/* Base table styles */
 .org-table {
     width: 100%;
     border-collapse: collapse;
-}
-
-.org-table th,
-.org-table td {
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--border-color);
-    white-space: nowrap;
-}
-
-.org-table tbody tr:last-child td {
-    border-bottom: none;
 }
 
 .org-table thead {
     background-color: var(--secondary-bg);
 }
 
+/* Table header cells */
 .org-table th {
     text-align: left;
     font-size: 0.75rem;
@@ -56,22 +67,37 @@
     letter-spacing: 0.05em;
 }
 
+/* General table cells (header and data) */
+.org-table th,
+.org-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+/* Hover effect for table rows */
 .org-table tbody tr:hover {
     background-color: var(--accent-active);
 }
+
+/* Remove bottom border from the last row */
+.org-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+
+/* Controls & Actions  */
+
+/* --- Filtering & Sorting --- */
 
 .filter-controls {
     display: flex;
     gap: 0.75rem;
 }
 
-.filter-controls>span {
+.filter-controls > span {
     display: flex;
     align-items: center;
-}
-
-.ml-auto {
-    margin-left: auto;
 }
 
 .filter-input {
@@ -111,6 +137,8 @@
     height: 1rem;
 }
 
+/* --- Row Action Buttons --- */
+
 .action-btn-group {
     display: flex;
     gap: 0.5rem;
@@ -132,6 +160,10 @@
     text-decoration: none;
 }
 
+.action-btn:hover {
+    filter: brightness(1.1);
+}
+
 .btn-edit {
     background-color: var(--accent-active);
     color: var(--text-primary);
@@ -148,20 +180,7 @@
     color: white;
 }
 
-.action-btn:hover {
-    filter: brightness(1.1);
-}
-
-.page-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 1.5rem;
-    margin-left: 0.75rem;
-    margin-right: 0.2rem;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-}
+/* --- Pagination --- */
 
 .pagination-controls {
     display: flex;
@@ -194,6 +213,10 @@
     font-size: 0.875rem;
 }
 
+
+/* General / Reusable Components  */
+
+/* Base button style */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -208,6 +231,7 @@
     transition: background-color 0.2s;
 }
 
+/* Primary button style */
 .btn-primary {
     background-color: #1d5add;
     color: white;
@@ -217,6 +241,7 @@
     background-color: #1844bd;
 }
 
+/* Secondary button style */
 .btn-secondary {
     background-color: var(--accent-active);
     color: var(--text-primary);
@@ -230,6 +255,13 @@
 .btn-icon {
     width: 1rem;
     height: 1rem;
+}
+
+
+/* Utility Styles  */
+
+.ml-auto {
+    margin-left: auto;
 }
 
 .flipped-horizontally {

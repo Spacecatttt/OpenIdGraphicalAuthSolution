@@ -1,3 +1,6 @@
+/* Dashboard Layout & Components  */
+
+/* Grid container for statistics cards */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -5,6 +8,7 @@
     margin-bottom: 2rem;
 }
 
+/* Individual card for displaying a statistic */
 .stat-card {
     background-color: var(--secondary-bg);
     padding: 1.5rem;
@@ -28,6 +32,10 @@
     color: var(--text-secondary);
 }
 
+
+/* Chart Styles  */
+
+/* Container for a chart */
 .chart-container {
     background-color: var(--bg-color);
     padding: 1.5rem;
@@ -40,6 +48,7 @@
     margin-bottom: 1rem;
 }
 
+/* Legend for the chart */
 .chart-legend {
     display: flex;
     flex-wrap: wrap;
@@ -60,6 +69,10 @@
     border-radius: 50%;
 }
 
+
+/* Status & Placeholder Styles  */
+
+/* Container for centering status messages (e.g., loading, no data) */
 .status-container {
     display: flex;
     align-items: center;
@@ -67,6 +80,7 @@
     min-height: 70vh;
 }
 
+/* The status message text */
 .status-message {
     font-size: 1.75rem;
     color: var(--text-secondary);
