@@ -51,6 +51,17 @@ footer {
     --chart-text-color: #e0e0e0;
 }
 
+.btn:disabled,
+.action-btn:disabled,
+.pagination-btn:disabled {
+    background-color: var(--border-color) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border-color) !important;
+    opacity: 0.7;
+    cursor: not-allowed;
+    box-shadow: none;
+    filter: none;
+}
 @media (min-width: 768px) {
     html {
         font-size: 16px;

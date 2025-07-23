@@ -89,6 +89,7 @@ builder.Services.AddAuthorizationCore();
 // --- Database and My Services ---
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<IOrganizationResolver, OrganizationResolver>();
+builder.Services.AddSingleton<IHelperService, HelperService>();
 builder.Services.AddScoped<AppState>();
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
@@ -97,6 +98,11 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
         sqlOptions => sqlOptions.MigrationsAssembly(migrationsAssembly))
            .UseLazyLoadingProxies());
 
+builder.Services.AddDbContextFactory<Duende.IdentityServer.EntityFramework.DbContexts.ConfigurationDbContext>(options =>
+    options.UseNpgsql(
+        connectionString,
+        sqlOptions => sqlOptions.MigrationsAssembly(migrationsAssembly)),
+    ServiceLifetime.Scoped);
 //
 var keysPath = Environment.GetEnvironmentVariable("DATAPROTECTION_KEYS_PATH");
 if (string.IsNullOrEmpty(keysPath))

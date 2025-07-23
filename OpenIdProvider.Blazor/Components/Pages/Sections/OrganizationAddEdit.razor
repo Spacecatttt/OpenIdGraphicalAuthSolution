@@ -165,7 +165,7 @@ else
                 {
                     UserId = AppState.CurrentUser.Id,
                     OrganizationId = organizationModel.Id,
-                    Role = "Owner"
+                    Role = OrganizationRole.Owner
                 };
                 dbContext.UserOrganizationRoles.Add(userRole);
 

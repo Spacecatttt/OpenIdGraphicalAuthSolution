@@ -217,7 +217,7 @@ Labels = new YAxisLabels { Formatter = "function(val) { return val.toFixed(0); }
             {
                 UserId = Guid.NewGuid(),
                 OrganizationId = testOrganizationId,
-                Role = "Viewer", // You can randomize this if needed
+                Role = OrganizationRole.Viewer,
                 AddedDate = registrationDate
                 // The 'User' and 'Organization' navigation properties are left null,
                 // as they are not needed for the chart data.

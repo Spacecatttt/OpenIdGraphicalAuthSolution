@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
+using Duende.IdentityServer.EntityFramework.Entities;
 
 namespace OpenIdProvider.Data.Models;
+
 public class Organization
 {
     public Guid Id { get; set; }
@@ -18,6 +20,8 @@ public class Organization
 
     public virtual ICollection<ApplicationUser> PrimaryUsers { get; set; } = new List<ApplicationUser>();
     public virtual ICollection<UserOrganizationRole> ManagedByUsers { get; set; } = new List<UserOrganizationRole>();
+    public virtual ICollection<OrganizationClientPermission> AllowedClientPermissions { get; set; } = new List<OrganizationClientPermission>();
 
     public virtual ICollection<Group> Groups { get; set; } = new List<Group>();
+    public virtual ICollection<ClientOwnership> OwnedClients { get; set; } = new List<ClientOwnership>();
 }
