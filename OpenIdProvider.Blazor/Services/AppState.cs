@@ -15,7 +15,7 @@ public class AppState : IDisposable
     public ApplicationUser? CurrentUser { get; private set; }
     public List<Organization> UserOrganizations { get; private set; } = new();
     public Organization? SelectedOrganization { get; private set; }
-
+    public OrganizationRole? CurrentUserRoleInSelectedOrg { get; private set; }
 
     public event Action? OnChange;
     private bool _isInitialized = false;
@@ -67,6 +67,8 @@ public class AppState : IDisposable
                     {
                         SelectedOrganization = userWithData.PrimaryOrganization ?? UserOrganizations.FirstOrDefault();
                     }
+
+                    UpdateCurrentUserRole();
                 }
             }
             _isInitialized = true;
@@ -91,8 +93,28 @@ public class AppState : IDisposable
         if (newOrg != null && newOrg.Id != SelectedOrganization?.Id)
         {
             SelectedOrganization = newOrg;
+            UpdateCurrentUserRole();
             NotifyStateChanged();
         }
+    }
+
+    private void UpdateCurrentUserRole()
+    {
+        if (CurrentUser == null || SelectedOrganization == null)
+        {
+            CurrentUserRoleInSelectedOrg = null;
+            return;
+        }
+        if (CurrentUser.PrimaryOrganizationId == SelectedOrganization.Id)
+        {
+            CurrentUserRoleInSelectedOrg = OrganizationRole.Owner;
+            return;
+        }
+
+        var roleEntry = CurrentUser.ManagedOrganizations
+            .FirstOrDefault(mo => mo.OrganizationId == SelectedOrganization.Id);
+
+        CurrentUserRoleInSelectedOrg = roleEntry?.Role;
     }
 
     private void NotifyStateChanged() => OnChange?.Invoke();

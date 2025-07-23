@@ -1,0 +1,550 @@
+@page "/users/add"
+@page "/users/edit/{UserId:guid}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using Duende.IdentityServer.EntityFramework.Entities
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using OpenIdProvider.Blazor.Services
+
+@inject ILogger<UserAddEdit> Logger
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject IDbContextFactory<Duende.IdentityServer.EntityFramework.DbContexts.ConfigurationDbContext> ConfigurationDbContextFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+@inject AppState AppState
+@inject IHelperService HelperService
+
+
+<PageTitle>User</PageTitle>
+
+@if (isLoading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (AppState.SelectedOrganization == null)
+{
+    <div class="form-container">
+        <p class="error-message">An organization must be selected to manage users.</p>
+    </div>
+}
+else if (!CanManageUsers)
+{
+    <div class="form-container">
+        <p class="error-message">You do not have permission to manage users in this organization.</p>
+    </div>
+}
+else
+{
+    <div class="form-container">
+        <div class="form-header">
+            <h1>@(IsNew ? "Add New User to " + AppState.SelectedOrganization.Name : "Edit User")</h1>
+            <button class="btn btn-secondary" @onclick="NavigateBack">
+                <img src="/images/table/back.png" alt="Back" class="btn-icon" />
+                <span>Back to Users</span>
+            </button>
+        </div>
+
+        <EditForm Model="userModel" OnValidSubmit="HandleSave">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+
+                <h2 class="form-section-header">Basic Information</h2>
+                <div class="form-group">
+                    <label for="displayName">Display Name<span class="required-asterisk">*</span></label>
+                    <InputText id="displayName" @bind-Value="userModel.DisplayName" class="form-input" />
+                    <ValidationMessage For="@(() => userModel.DisplayName)" />
+                </div>
+                <div class="form-group">
+                    <label for="username">Username<span class="required-asterisk">*</span></label>
+                    <InputText id="username" @bind-Value="userModel.UserName" class="form-input" />
+                    <ValidationMessage For="@(() => userModel.UserName)" />
+                </div>
+                <div class="form-group">
+                    <label for="email">Email<span class="required-asterisk">*</span></label>
+                    <InputText id="email" @bind-Value="userModel.Email" class="form-input" disabled="@(!IsNew)" />
+                    <ValidationMessage For="@(() => userModel.Email)" />
+                </div>
+                <div class="form-group">
+                    <label for="avatarUrl">Avatar URL</label>
+                    <InputText id="avatarUrl" @bind-Value="userModel.AvatarUrl" class="form-input" />
+                </div>
+
+                <h2 class="form-section-header">Authentication</h2>
+                <div class="form-group">
+                    @* // TODO: use enum *@
+                    <label for="authType">Authentication Type</label>
+                    <InputSelect TValue="AuthMethod" @bind-Value="userModel.AuthType" class="form-input">
+                        <option value="@AuthMethod.Password">Password</option>
+                        <option value="@AuthMethod.Graphical">Graphical</option>
+                    </InputSelect>
+                </div>
+
+                @if (userModel.AuthType == AuthMethod.Graphical)
+                {
+                    <div class="form-group">
+                        @* // TODO: use enum *@
+                        <label for="graphicalAuthType">Graphical Method</label>
+                        <InputSelect TValue="string" @bind-Value="userModel.GraphicalAuthType" class="form-input">
+                            <option value="ImageSequence">Image Sequence</option>
+                            <option value="ClickPattern">Click Pattern</option>
+                        </InputSelect>
+                    </div>
+                }
+
+                @if (IsNew && userModel.AuthType == AuthMethod.Password)
+                {
+                    <div class="form-group">
+                        <label for="password">Password<span class="required-asterisk">*</span></label>
+                        <div class="password-input-wrapper">
+                            <InputText id="password" @bind-Value="userModel.Password" type="@passwordFieldType"
+                                class="form-input" />
+                            <div class="password-buttons">
+                                <button type="button" class="password-btn" title="Generate Password"
+                                    @onclick="() => userModel.Password = HelperService.GeneratePassword(16)">
+                                    <img src="/images/security/generate_password.png" alt="Generate" />
+                                </button>
+                                <button type="button" class="password-btn" @onclick="TogglePasswordVisibility"
+                                    title="Show/Hide Password">
+                                    <img src="@(passwordFieldType == "password" ?
+                                                                                         "/images/security/eye_show.png" :
+                                                                                         "/images/security/eye_hide.png")" alt="Show/Hide" />
+                                </button>
+                            </div>
+                        </div>
+                        <ValidationMessage For="@(() => userModel.Password)" />
+                    </div>
+                }
+
+                <h2 class="form-section-header">Additional Information</h2>
+                <div class="form-group">
+                    <label for="country">Country/Region</label>
+                    <InputText id="country" @bind-Value="userModel.Country" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label for="location">Location</label>
+                    <InputText id="location" @bind-Value="userModel.Location" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label for="address">Address</label>
+                    <InputText id="address" @bind-Value="userModel.Address" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label for="bio">Bio</label>
+                    <InputTextArea id="bio" @bind-Value="userModel.Bio" class="form-textarea" rows="3" />
+                </div>
+
+                <h2 class="form-section-header">Assignments</h2>
+                <div class="form-group">
+                    <label for="role">Role in Organization</label>
+                    <InputSelect @bind-Value="userModel.Role" TValue="OrganizationRole" class="form-input">
+                        @foreach (var role in Enum.GetValues<OrganizationRole>())
+                        {
+                            <option value="@role">@role.ToString()</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="form-group">
+                    <label>Groups</label>
+                    <div class="multi-select-wrapper">
+                        <div class="multi-select-container" @onclick="() => isGroupDropdownOpen = !isGroupDropdownOpen">
+                            @if (!GetSelectedGroups().Any())
+                            {
+                                <span class="multi-select-placeholder">Select a group to add...</span>
+                            }
+                            @foreach (var selectedGroup in GetSelectedGroups())
+                            {
+                                <div class="selected-item">
+                                    <span>@selectedGroup.Name</span>
+                                    <button type="button" class="remove-item-btn" @onclick="() => RemoveGroup(selectedGroup.Id)" @onclick:stopPropagation>&times;</button>
+                                </div>
+                            }
+                        </div>
+
+                        @if (isGroupDropdownOpen)
+                        {
+                            <ul class="multi-select-dropdown">
+                                @foreach (var group in availableGroups)
+                                {
+                                    <li @onclick="() => SelectGroup(group.Id)">@group.Name</li>
+                                }
+                                @if (!availableGroups.Any())
+                                {
+                                    <li class="disabled">No more groups to add</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Signup Clients</label>
+                    <div class="multi-select-wrapper">
+                        <div class="multi-select-container" @onclick="() => isClientDropdownOpen = !isClientDropdownOpen">
+                            @if (!GetSelectedClients().Any())
+                            {
+                                <span class="multi-select-placeholder">Select a client to add...</span>
+                            }
+                            @foreach (var selectedClient in GetSelectedClients())
+                            {
+                                <div class="selected-item">
+                                    <span>@selectedClient.ClientName</span>
+                                    <button type="button" class="remove-item-btn" @onclick="() => RemoveClient(selectedClient.Id)" @onclick:stopPropagation>&times;</button>
+                                </div>
+                            }
+                        </div>
+
+                        @if (isClientDropdownOpen)
+                        {
+                            <ul class="multi-select-dropdown">
+                                @foreach (var client in availableClients)
+                                {
+                                    <li @onclick="() => SelectClient(client.Id)">@client.ClientName (@client.Id)</li>
+                                }
+                                @if (!availableClients.Any())
+                                {
+                                    <li class="disabled">No more clients to add</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+
+            </div>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="error-message">@errorMessage</div>
+            }
+            <div class="form-footer">
+                <button type="submit" class="btn btn-primary">@(IsNew ? "Add User" : "Save Changes")</button>
+                <button type="button" class="btn btn-secondary" @onclick="NavigateBack">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+@code {
+    #region Parameters & State
+    [Parameter]
+    public Guid? UserId { get; set; }
+
+    private UserViewModel userModel = new();
+    private bool isLoading = true;
+    private bool IsNew => UserId == null;
+    private string? errorMessage;
+    private string passwordFieldType = "password";
+    private bool CanManageUsers => AppState.CurrentUserRoleInSelectedOrg >= OrganizationRole.Admin;
+
+    // Data for dropdowns
+    private List<Group> allGroupsInOrg = new();
+    private List<Group> availableGroups => allGroupsInOrg.Where(g => !userModel.SelectedGroupIds.Contains(g.Id)).ToList();
+    private List<Client> allClientsInOrg = new();
+    private List<Client> availableClients => allClientsInOrg.Where(c => !userModel.SelectedClientIds.Contains(c.Id)).ToList();
+
+    private bool isGroupDropdownOpen = false;
+    private bool isClientDropdownOpen = false;
+    #endregion
+
+    #region Lifecycle & Data Loading
+    protected override async Task OnInitializedAsync()
+    {
+        if (!CanManageUsers || AppState.SelectedOrganization == null)
+        {
+            isLoading = false;
+            return;
+        }
+
+        await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+        allGroupsInOrg = await dbContext.Groups
+            .Where(g => g.OrganizationId == AppState.SelectedOrganization.Id)
+            .AsNoTracking().ToListAsync();
+
+        var clientIdsForOrg = await dbContext.ClientOwnerships
+            .Where(co => co.OrganizationId == AppState.SelectedOrganization.Id)
+            .Select(co => co.ClientId)
+            .ToListAsync();
+
+        await using var configDbContext = await ConfigurationDbContextFactory.CreateDbContextAsync();
+
+        allClientsInOrg = await configDbContext.Clients
+            .Where(c => clientIdsForOrg.Contains(c.Id))
+            .AsNoTracking().ToListAsync();
+
+        if (IsNew)
+        {
+            // Generate UserViewModel with predefined values
+            userModel = await GenerateDataAsync();
+        }
+        else
+        {
+            var user = await dbContext.Users
+                .Include(u => u.Groups)
+                .Include(u => u.AllowedClientPermissions)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == UserId);
+
+            var userRole = await dbContext.UserOrganizationRoles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(uor => uor.UserId == UserId && uor.OrganizationId == AppState.SelectedOrganization.Id);
+
+            if (user != null && userRole != null)
+            {
+                if (AppState.CurrentUserRoleInSelectedOrg < userRole.Role)
+                {
+                    errorMessage = "You cannot edit a user with a higher role than your own.";
+                    userModel = new();
+                    isLoading = false;
+                    return;
+                }
+
+                userModel = new UserViewModel
+                {
+                    DisplayName = user.DisplayName!,
+                    UserName = user.UserName!,
+                    Email = user.Email!,
+                    AvatarUrl = user.AvatarUrl,
+                    Role = userRole.Role,
+                    SelectedGroupIds = user.Groups.Select(g => g.Id).ToList(),
+                    SelectedClientIds = user.AllowedClientPermissions.Select(p => p.ClientId).ToList(),
+                    Country = user.Country,
+                    Location = user.Location,
+                    Address = user.Address,
+                    Bio = user.Bio,
+                    AuthType = string.IsNullOrEmpty(user.GraphicalAuthMethodType) ? AuthMethod.Password : AuthMethod.Graphical,
+                    GraphicalAuthType = user.GraphicalAuthMethodType
+                };
+            }
+            else { errorMessage = "User not found in the selected organization."; }
+        }
+        isLoading = false;
+    }
+    private async Task<UserViewModel> GenerateDataAsync()
+    {
+        await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+        string newUserName;
+
+        while (true)
+        {
+            var randomSuffix = HelperService.GenerateRandomString(8);
+            newUserName = $"user-{randomSuffix}";
+
+            var userExists = await dbContext.Users.AnyAsync(u => u.UserName == newUserName);
+            if (!userExists)
+            {
+                break;
+            }
+        }
+
+        return new UserViewModel
+        {
+            Role = OrganizationRole.Viewer,
+            UserName = newUserName,
+            Password = HelperService.GeneratePassword(16)
+        };
+    }
+   #endregion
+
+    #region Event Handlers & Navigation
+    private async Task HandleSave()
+    {
+        if (AppState.SelectedOrganization == null) { errorMessage = "An organization must be selected."; return; }
+        errorMessage = null;
+
+        if (IsNew && string.IsNullOrWhiteSpace(userModel.Password))
+        {
+            errorMessage = "Password is required for a new user.";
+            return;
+        }
+
+        if (AppState.CurrentUserRoleInSelectedOrg < OrganizationRole.Admin && userModel.Role == OrganizationRole.Owner)
+        {
+            errorMessage = "You cannot assign the Owner role.";
+            return;
+        }
+
+        try
+        {
+            if (IsNew)
+            {
+                await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+
+                // Create a personal organization for the new user
+                var personalOrg = new Organization
+                {
+                    Name = $"{userModel.UserName}'s Personal Space",
+                    Slug = $"{userModel.UserName}-personal-space",
+                    CreatedDate = DateTime.UtcNow,
+                    ModifiedDate = DateTime.UtcNow
+                };
+                dbContext.Organizations.Add(personalOrg);
+                await dbContext.SaveChangesAsync();
+
+                //Create new user and set their PrimaryOrganizationId
+                var newUser = new ApplicationUser
+                {
+                    UserName = userModel.UserName,
+                    Email = userModel.Email,
+                    DisplayName = userModel.DisplayName,
+                    AvatarUrl = userModel.AvatarUrl,
+                    Country = userModel.Country,
+                    Location = userModel.Location,
+                    Address = userModel.Address,
+                    Bio = userModel.Bio,
+                    GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ? userModel.GraphicalAuthType : null,
+                    PrimaryOrganizationId = personalOrg.Id
+                };
+                var result = await UserManager.CreateAsync(newUser, userModel.Password);
+
+                if (result.Succeeded)
+                {
+                    var userRole = new UserOrganizationRole
+                    {
+                        UserId = newUser.Id,
+                        OrganizationId = AppState.SelectedOrganization.Id,
+                        Role = userModel.Role
+                    };
+                    dbContext.UserOrganizationRoles.Add(userRole);
+
+                    var userToUpdate = await dbContext.Users.FindAsync(newUser.Id);
+                    if (userToUpdate != null)
+                    {
+                        // Assign groups
+                        var selectedGroups = dbContext.Groups.Where(g => userModel.SelectedGroupIds.Contains(g.Id)).ToList();
+                        foreach (var group in selectedGroups)
+                        {
+                            userToUpdate.Groups.Add(group);
+                        }
+
+                        // Assign clients
+                        foreach(var clientId in userModel.SelectedClientIds)
+                        {
+                            dbContext.UserClientPermissions.Add(
+                                new UserClientPermission
+                                {
+                                    UserId = newUser.Id,
+                                    ClientId = clientId
+                                }
+                            );
+                        }
+                    }
+                    await dbContext.SaveChangesAsync();
+                    NavigateBack();
+                }
+                else
+                {
+                    errorMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+                }
+            }
+            else
+            {
+                await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+
+                var userToUpdate = await dbContext.Users
+                    .Include(u => u.Groups)
+                    .Include(u => u.AllowedClientPermissions)
+                    .FirstOrDefaultAsync(u => u.Id == UserId);
+
+                var userRoleToUpdate = await dbContext.UserOrganizationRoles
+                    .FirstOrDefaultAsync(uor => uor.UserId == UserId &&
+                                                uor.OrganizationId == AppState.SelectedOrganization.Id);
+
+                if (userToUpdate != null && userRoleToUpdate != null)
+                {
+                    userRoleToUpdate.User.DisplayName = userModel.DisplayName;
+                    userRoleToUpdate.User.UserName = userModel.UserName;
+                    userRoleToUpdate.User.AvatarUrl = userModel.AvatarUrl;
+                    userRoleToUpdate.Role = userModel.Role;
+                    userRoleToUpdate.User.Country = userModel.Country;
+                    userRoleToUpdate.User.Location = userModel.Location;
+                    userRoleToUpdate.User.Address = userModel.Address;
+                    userRoleToUpdate.User.Bio = userModel.Bio;
+                    userRoleToUpdate.User.GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ?
+                                                                    userModel.GraphicalAuthType
+                                                                    : null;
+
+                    // Groups
+                    userRoleToUpdate.User.Groups.Clear();
+                    var selectedGroups = dbContext.Groups.Where(g => userModel.SelectedGroupIds.Contains(g.Id)).ToList();
+                    foreach (var group in selectedGroups)
+                    {
+                        userRoleToUpdate.User.Groups.Add(group);
+                    }
+
+                    // Clients
+                    dbContext.UserClientPermissions.RemoveRange(userToUpdate.AllowedClientPermissions);
+                    foreach(var clientId in userModel.SelectedClientIds)
+                    {
+                        userToUpdate.AllowedClientPermissions.Add(new UserClientPermission { ClientId = clientId });
+                    }
+
+                    await dbContext.SaveChangesAsync();
+                    NavigateBack();
+                }
+                else {
+                    errorMessage = "Could not find the user to update.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "An error occurred while saving the user.");
+            errorMessage = "An error occurred while saving the user.";
+        }
+    }
+    private void TogglePasswordVisibility()
+    {
+        passwordFieldType = passwordFieldType == "password" ? "text" : "password";
+    }
+
+    private IEnumerable<Group> GetSelectedGroups() =>
+        allGroupsInOrg.Where(g => userModel.SelectedGroupIds.Contains(g.Id));
+    private void SelectGroup(Guid groupId)
+    {
+        if (!userModel.SelectedGroupIds.Contains(groupId))
+        {
+            userModel.SelectedGroupIds.Add(groupId);
+        }
+        isGroupDropdownOpen = false;
+    }
+    private void RemoveGroup(Guid groupId) => userModel.SelectedGroupIds.Remove(groupId);
+
+    private IEnumerable<Client> GetSelectedClients() =>
+        allClientsInOrg.Where(c => userModel.SelectedClientIds.Contains(c.Id));
+    private void SelectClient(int clientId)
+    {
+        if (clientId != 0 &&!userModel.SelectedClientIds.Contains(clientId))
+        {
+            userModel.SelectedClientIds.Add(clientId);
+        }
+        isClientDropdownOpen = false;
+    }
+    private void RemoveClient(int clientId) => userModel.SelectedClientIds.Remove(clientId);
+    private void NavigateBack() => NavigationManager.NavigateTo("/users");
+    #endregion
+
+    public class UserViewModel
+    {
+        [Required]
+        public string DisplayName { get; set; } = string.Empty;
+        [Required]
+        public string UserName { get; set; } = string.Empty;
+        [Required, EmailAddress]
+        public string Email { get; set; } = string.Empty;
+        public string? AvatarUrl { get; set; }
+        public string Password { get; set; } = string.Empty;
+        public OrganizationRole Role { get; set; } = OrganizationRole.Viewer;
+        public AuthMethod AuthType { get; set; } = AuthMethod.Password;
+        public string? GraphicalAuthType { get; set; } = "ImageSequence";
+        public string? Country { get; set; }
+        public string? Location { get; set; }
+        public string? Address { get; set; }
+        public string? Bio { get; set; }
+        public List<Guid> SelectedGroupIds { get; set; } = new();
+        public List<int> SelectedClientIds { get; set; } = new();
+    }
+}

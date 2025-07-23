@@ -92,9 +92,11 @@ else
                                         class="action-btn btn-manage">Groups</button>
                                     <button @onclick='() => GoToUsersPage(org.Slug)'
                                         class="action-btn btn-manage">Users</button>
-                                    <button @onclick='() => GoToEditPage(org.Id)' class="action-btn btn-edit">Edit</button>
-                                    <button @onclick='() => DeleteOrganization(org.Id, org.Name)'
-                                        class="action-btn btn-delete">Delete</button>
+
+                                    <button @onclick='() => GoToEditPage(org.Id)' class="action-btn btn-edit"
+                                        disabled="@(GetUserRoleForOrg(org.Id) < OrganizationRole.Admin)">Edit</button>
+                                    <button @onclick='() => DeleteOrganization(org.Id, org.Name)' class="action-btn btn-delete"
+                                        disabled="@(GetUserRoleForOrg(org.Id) < OrganizationRole.Owner)">Delete</button>
                                 </div>
                             </td>
                         </tr>
@@ -143,18 +145,6 @@ else
     private int totalPages;
     private int totalOrganizations;
 
-    //protected override async Task OnInitializedAsync()
-    //{
-    // if (AppState.CurrentUser != null)
-    // {
-    // await LoadOrganizationsAsync();
-    // }
-    // else
-    // {
-    // AppState.OnChange += LoadDataAfterStateInit;
-    // }
-    // await LoadOrganizationsAsync();
-    //}
     protected override async Task OnParametersSetAsync()
     {
         if (AppState.CurrentUser != null)
@@ -219,6 +209,21 @@ else
 
         isLoading = false;
         return InvokeAsync(StateHasChanged);
+    }
+
+    private OrganizationRole GetUserRoleForOrg(Guid orgId)
+    {
+        if (AppState.CurrentUser == null) return OrganizationRole.Viewer;
+
+        if (AppState.CurrentUser.PrimaryOrganizationId == orgId)
+        {
+            return OrganizationRole.Owner;
+        }
+
+        var managedRole = AppState.CurrentUser.ManagedOrganizations
+        .FirstOrDefault(mo => mo.OrganizationId == orgId);
+
+        return managedRole?.Role ?? OrganizationRole.Viewer;
     }
 
     // Properties for filtering with debouncing

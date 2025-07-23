@@ -71,8 +71,8 @@ else
                             <td class="text-sm text-text-secondary">@group.Users.Count</td>
                             <td colspan="2">
                                 <div class="action-btn-group">
-                                    <button @onclick='() => GoToEditPage(group.Id)' class="action-btn btn-edit">Edit</button>
-                                    <button @onclick='() => DeleteGroup(group.Id, group.Name)' class="action-btn btn-delete">Delete</button>
+                                    <button @onclick='() => GoToEditPage(group.Id)' class="action-btn btn-edit" disabled="@(!CanManageGroups)">Edit</button>
+                                    <button @onclick='() => DeleteGroup(group.Id, group.Name)' class="action-btn btn-delete" disabled="@(!CanManageGroups)">Delete</button>
                                 </div>
                             </td>
                         </tr>
@@ -101,15 +101,20 @@ else
     private List<Group> allGroupsForOrg = new();
     private int totalGroups;
 
+    private bool CanManageGroups => AppState.CurrentUserRoleInSelectedOrg >= OrganizationRole.Admin;
+
     private string? _nameSearch;
     private string? nameSearch { get => _nameSearch; set { _nameSearch = value; FilterGroups(); } }
 
     protected override async Task OnInitializedAsync()
     {
-        AppState.OnChange += async () => await InvokeAsync(LoadGroupsAsync);
+        AppState.OnChange += HandleStateChange;
         await LoadGroupsAsync();
     }
-
+    private async void HandleStateChange()
+    {
+        await InvokeAsync(LoadGroupsAsync);
+    }
     private async Task LoadGroupsAsync()
     {
         isLoading = true;
@@ -145,12 +150,10 @@ else
         groups = query.ToList();
         totalGroups = groups.Count;
     }
-
     private void ClearFilters() => nameSearch = string.Empty;
 
     private void GoToAddPage() => NavigationManager.NavigateTo("/groups/add");
     private void GoToEditPage(Guid groupId) => NavigationManager.NavigateTo($"/groups/edit/{groupId}");
-
     private async Task DeleteGroup(Guid groupId, string groupName)
     {
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete group '{groupName}'?");
@@ -169,6 +172,6 @@ else
 
     public void Dispose()
     {
-        AppState.OnChange -= async () => await InvokeAsync(LoadGroupsAsync);
+        AppState.OnChange -= HandleStateChange;
     }
 }

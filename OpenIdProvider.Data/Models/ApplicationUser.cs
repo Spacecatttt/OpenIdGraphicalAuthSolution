@@ -14,11 +14,24 @@ public class ApplicationUser : IdentityUser<Guid>
     public string? GraphicalAuthMethodType { get; set; } // e.g., "ImageSequence", "ClickPattern"
     public string? GraphicalAuthMetadata { get; set; }   // e.g., JSON storing image IDs or pattern data
 
+    [MaxLength(100)]
+    public string? Country { get; set; }
+
+    [MaxLength(100)]
+    public string? Location { get; set; }
+
+    [MaxLength(256)]
+    public string? Address { get; set; }
+
+    [MaxLength(1024)]
+    public string? Bio { get; set; }
+
     public Guid PrimaryOrganizationId { get; set; }
 
     [ForeignKey("PrimaryOrganizationId")]
     public virtual Organization PrimaryOrganization { get; set; } = null!;
     public virtual ICollection<Group> Groups { get; set; } = new List<Group>();
+    public virtual ICollection<UserClientPermission> AllowedClientPermissions { get; set; } = new List<UserClientPermission>();
 
     // This collection represents additional organizations a user might manage
     // or have a role in, beyond their PrimaryOrganization.

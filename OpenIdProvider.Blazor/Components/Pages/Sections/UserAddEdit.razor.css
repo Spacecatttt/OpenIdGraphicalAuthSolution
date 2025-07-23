@@ -1,0 +1,340 @@
+/* Form Layout & Structure  */
+
+/* The main container for the entire form */
+.form-container {
+    background-color: var(--secondary-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
+    max-width: 900px;
+    margin: 2rem auto;
+}
+
+/* Header section of the form, containing the title */
+.form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.form-header h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* A grid system for laying out form fields */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+}
+
+/* A general wrapper for a label and its corresponding input */
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Footer of the form */
+.form-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+/* A header for a specific section within the form */
+.form-section-header {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-top: 1rem;
+    margin-bottom: 0;
+}
+
+
+/* Form Controls & Inputs  */
+
+.form-group label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.form-group ::deep .form-input,
+.form-group ::deep .form-textarea {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    font-size: 1rem;
+    width: 100%;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+    outline: none;
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 0 2px var(--accent-purple);
+}
+
+/* Styles for a group containing a checkbox and its label */
+.form-group-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.form-group-checkbox label {
+    margin-bottom: 0;
+}
+
+
+/* Buttons  */
+
+/* Base button style */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: none;
+    border-radius: 0.375rem;
+    padding: 0.6rem 1.2rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn img {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Primary button style */
+.btn-primary {
+    background-color: #1d5add;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #1844bd;
+}
+
+/* Secondary button style */
+.btn-secondary {
+    background-color: var(--accent-active);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    filter: brightness(0.95);
+}
+
+
+/* Validation & Feedback  */
+
+/* A general error message block */
+.error-message {
+    background-color: var(--bg-color);
+    color: #ef4444;
+    border: 1px solid #ef4444;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-top: 1.5rem;
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+/* Inline validation message for a specific field */
+.validation-message {
+    color: #ef4444;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+/* Styles applied to an input's container when it's invalid */
+.invalid .form-input,
+.invalid .form-textarea {
+    border-color: #ef4444;
+}
+
+/* Red asterisk for marking required fields */
+.required-asterisk {
+    color: #ef4444;
+    margin-left: 0.25rem;
+}
+
+
+/* Specific Components  */
+
+/* --- Password Input with Toggle --- */
+
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper .form-input {
+    padding-right: 5rem;
+    /* Space for buttons */
+}
+
+.password-buttons {
+    position: absolute;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.password-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+}
+
+.password-btn img {
+    width: 1.25rem;
+    height: 1.25rem;
+    opacity: 0.6;
+}
+
+.password-btn:hover img {
+    opacity: 1;
+}
+
+
+/* --- Selected Items / Tags Display --- */
+
+.selected-items-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    min-height: 40px;
+    background-color: var(--bg-color);
+}
+
+.selected-item {
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--accent-active);
+    color: var(--text-primary);
+    border-radius: 9999px;
+    /* Pill shape */
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.remove-item-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1.25rem;
+    line-height: 1;
+    margin-left: 0.5rem;
+    padding: 0;
+}
+
+.remove-item-btn:hover {
+    color: var(--text-primary);
+}
+
+.empty-selection-placeholder {
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.875rem;
+    align-self: center;
+    width: 100%;
+}
+
+
+/* --- Multi-Select Dropdown Component --- */
+
+.multi-select-wrapper {
+    position: relative;
+}
+
+.multi-select-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    min-height: 44px;
+    /* Align with other inputs */
+    background-color: var(--bg-color);
+    cursor: pointer;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.multi-select-container:hover {
+    border-color: var(--text-secondary);
+}
+
+.multi-select-placeholder {
+    color: var(--text-secondary);
+    align-self: center;
+}
+
+.multi-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--secondary-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-top: 0.25rem;
+    padding: 0.5rem 0;
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.multi-select-dropdown li {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.multi-select-dropdown li:hover {
+    background-color: var(--accent-active);
+}
+
+.multi-select-dropdown li.disabled {
+    color: var(--text-secondary);
+    cursor: not-allowed;
+}
+
+
+/* Theme Overrides  */
+
+/* Specific override for password button icon in dark theme */
+:root.dark-theme .password-btn img {
+    filter: invert(1);
+}

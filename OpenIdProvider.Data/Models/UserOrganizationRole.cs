@@ -16,7 +16,6 @@ public class UserOrganizationRole
     [ForeignKey("OrganizationId")]
     public virtual Organization Organization { get; set; } = null!;
 
-    // Role for this specific organization (e.g., "Admin", "Viewer", "Billing")
-    public string Role { get; set; } = "Viewer";
+    public OrganizationRole Role { get; set; } = OrganizationRole.Viewer;
     public DateTime AddedDate { get; set; } = DateTime.UtcNow;
 }

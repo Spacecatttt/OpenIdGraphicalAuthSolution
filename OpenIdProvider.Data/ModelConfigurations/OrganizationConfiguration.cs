@@ -22,5 +22,10 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
                .WithOne(g => g.Organization)
                .HasForeignKey(g => g.OrganizationId)
                .OnDelete(DeleteBehavior.Cascade); // Deleting an org deletes its groups
+
+        // Configure the one-to-many relationship
+        builder.HasMany(o => o.OwnedClients)
+               .WithOne(co => co.Organization)
+               .HasForeignKey(co => co.OrganizationId);
     }
 }
