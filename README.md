@@ -38,6 +38,3 @@ dotnet ef database update
 ```bash
 ef migrations remove
 ```
-
-user2
-123321

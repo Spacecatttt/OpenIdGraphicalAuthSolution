@@ -68,21 +68,3 @@
     height: 10px;
     border-radius: 50%;
 }
-
-
-/* Status & Placeholder Styles  */
-
-/* Container for centering status messages (e.g., loading, no data) */
-.status-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 70vh;
-}
-
-/* The status message text */
-.status-message {
-    font-size: 1.75rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}
