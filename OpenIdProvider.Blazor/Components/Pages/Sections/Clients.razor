@@ -1,0 +1,317 @@
+@page "/clients"
+@attribute [Authorize]
+@implements IDisposable
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using OpenIdProvider.Blazor.Services
+@using Duende.IdentityServer.EntityFramework.Entities
+
+@inject ILogger<Clients> Logger
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject IDbContextFactory<Duende.IdentityServer.EntityFramework.DbContexts.ConfigurationDbContext> ConfigurationDbContextFactory
+@inject NavigationManager NavigationManager
+@inject AppState AppState
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Clients for @(AppState.SelectedOrganization?.Name ?? "Selected Organization")</PageTitle>
+
+@if (isLoading)
+{
+    <div class="status-container">
+        <p class="status-message"><em>Loading...</em></p>
+    </div>
+}
+else if (AppState.SelectedOrganization == null)
+{
+    <div class="page-container">
+        <div class="page-header">
+             <h1>Clients</h1>
+        </div>
+        <p class="info-message">Please select an organization from the navigation bar to view its clients.</p>
+    </div>
+}
+else
+{
+    <div class="page-container">
+        <div class="page-header">
+            <h1>Clients in @AppState.SelectedOrganization.Name</h1>
+            <button type="button" @onclick="GoToAddPage" class="btn btn-primary" disabled="@(!CanManageClients)">
+                <img src="/images/table/add.png" alt="Add Client" class="btn-icon" />
+                <span>Add Client</span>
+            </button>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="org-table">
+                <thead>
+                    <tr>
+                        <th>
+                            <div class="filter-controls">
+                                <span>Client Name</span>
+                                <input @bind="clientNameSearch" @bind:event="oninput" class="filter-input" type="text" placeholder="Search..." />
+                            </div>
+                        </th>
+                        <th>
+                            <div class="filter-controls">
+                                <span>Client ID</span>
+                                <input @bind="clientIdSearch" @bind:event="oninput" class="filter-input" type="text" placeholder="Search..." />
+                            </div>
+                        </th>
+                        <th>
+                            <div class="filter-controls">
+                                <span>Creation Time</span>
+                                <button type="button" @onclick="ApplySort" class="sort-btn">
+                                    @if (sortOrder == "date_asc")
+                                    {
+                                        <img src="/images/table/sort_up.png" alt="Sorted Ascending" />
+                                    }
+                                    else if (sortOrder == "date_desc")
+                                    {
+                                        <img src="/images/table/sort_down.png" alt="Sorted Descending" />
+                                    }
+                                    else
+                                    {
+                                        <img src="/images/table/sort.png" alt="Sort" />
+                                    }
+                                </button>
+                            </div>
+                        </th>
+                        <th>Enabled</th>
+                        <th colspan="2">
+                            <div class="filter-controls">
+                                <button type="button" @onclick="ClearFilters" class="btn btn-secondary w-full text-xs py-2 ml-auto">Clear</button>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var client in clients)
+                    {
+                        <tr>
+                            <td>@client.ClientName</td>
+                            <td class="text-sm text-text-secondary">@client.ClientId</td>
+                            <td class="text-sm text-text-secondary">@client.Created.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="text-sm text-text-secondary">@(client.Enabled ? "Yes" : "No")</td>
+                            <td colspan="2">
+                                <div class="action-btn-group">
+                                    <button @onclick='() => GoToEditPage(client.Id)' class="action-btn btn-edit" disabled="@(!CanManageClients)">Edit</button>
+                                    <button @onclick='() => DeleteClient(client.Id, client.ClientName)' class="action-btn btn-delete" disabled="@(!CanManageClients)">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    @if (!clients.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center text-text-secondary py-8">No clients found in this organization.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="page-footer">
+            <div>
+                <span>@totalClients in total</span>
+            </div>
+            <div class="pagination-controls">
+                <button type="button" @onclick="() => ChangePage(currentPage - 1)" disabled="@(currentPage <= 1)" class="pagination-btn">
+                    <img src="/images/table/arrow-right.png" alt="Previous" class="btn-icon flipped-horizontally" />
+                </button>
+                <span>@currentPage / @totalPages</span>
+                <button type="button" @onclick="() => ChangePage(currentPage + 1)" disabled="@(currentPage >= totalPages)" class="pagination-btn">
+                    <img src="/images/table/arrow-right.png" alt="Next" class="btn-icon" />
+                </button>
+                <select @bind="pageSize" class="page-size-selector">
+                    <option value="10">10 / page</option>
+                    <option value="20">20 / page</option>
+                    <option value="50">50 / page</option>
+                </select>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    #region Component State
+    private bool isLoading = true;
+    private List<Client> clients = new();
+    private List<Client> allClientsForOrg = new();
+
+    // State for pagination
+    private int totalClients;
+    private int currentPage = 1;
+    private int totalPages;
+    private int _pageSize = 10;
+    private int pageSize
+    {
+        get => _pageSize;
+        set { if (_pageSize != value) { _pageSize = value; currentPage = 1; FilterClients(); } }
+    }
+
+    // State for sorting
+    private string? sortOrder;
+    private string? _clientNameSearch;
+    private string? clientNameSearch { get => _clientNameSearch; set { _clientNameSearch = value; FilterClients(); } }
+    private string? _clientIdSearch;
+    private string? clientIdSearch { get => _clientIdSearch; set { _clientIdSearch = value; FilterClients(); } }
+
+    // Section: Permissions
+    private bool CanManageClients => AppState.CurrentUserRoleInSelectedOrg >= OrganizationRole.Admin;
+    #endregion
+
+    #region Lifecycle & Data Loading
+    protected override async Task OnInitializedAsync()
+    {
+        AppState.OnChange += HandleAppStateChange;
+        await LoadClientsAsync();
+    }
+    private async void HandleAppStateChange()
+    {
+        await InvokeAsync(LoadClientsAsync);
+    }
+    private async Task LoadClientsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        if (AppState.SelectedOrganization == null)
+        {
+            allClientsForOrg.Clear();
+        }
+        else
+        {
+            await using var appDbContext = await DbContextFactory.CreateDbContextAsync();
+            var clientIdsForOrg = await appDbContext.ClientOwnerships
+                .Where(co => co.OrganizationId == AppState.SelectedOrganization.Id)
+                .Select(co => co.ClientId)
+                .ToListAsync();
+
+            await using var configDbContext = await ConfigurationDbContextFactory.CreateDbContextAsync();
+            var loadedClients = await configDbContext.Clients
+                .Where(c => clientIdsForOrg.Contains(c.Id))
+                .AsNoTracking()
+                .ToListAsync(); // Sorting will be done in memory
+
+            allClientsForOrg = loadedClients;
+        }
+
+        FilterClients();
+        isLoading = false;
+        StateHasChanged();
+    }
+    #endregion
+
+    #region Filtering & Pagination
+    private void FilterClients()
+    {
+        var query = allClientsForOrg.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(_clientNameSearch))
+        {
+            query = query.Where(c => c.ClientName != null && c.ClientName.Contains(_clientNameSearch, StringComparison.OrdinalIgnoreCase));
+        }
+        if (!string.IsNullOrWhiteSpace(_clientIdSearch))
+        {
+            query = query.Where(c => c.ClientId.Contains(_clientIdSearch, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Apply sorting
+        switch (sortOrder)
+        {
+            case "date_asc":
+                query = query.OrderBy(c => c.Created);
+                break;
+            case "date_desc":
+                query = query.OrderByDescending(c => c.Created);
+                break;
+            default:
+                query = query.OrderBy(c => c.ClientName);
+                break;
+        }
+
+        var filteredList = query.ToList();
+
+        totalClients = filteredList.Count;
+        totalPages = (int)Math.Ceiling(totalClients / (double)pageSize);
+        if (totalPages == 0) totalPages = 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+
+        clients = filteredList
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+    }
+    private void ChangePage(int newPage)
+    {
+        if (newPage > 0 && newPage <= totalPages)
+        {
+            currentPage = newPage;
+            FilterClients();
+        }
+    }
+    private void ClearFilters()
+    {
+        _clientNameSearch = string.Empty;
+        _clientIdSearch = string.Empty;
+        FilterClients();
+    }
+    #endregion
+
+    #region Event Handlers & Navigation
+    private void ApplySort()
+    {
+        sortOrder = sortOrder switch
+        {
+            "date_asc" => "date_desc",
+            "date_desc" => "",
+            _ => "date_asc"
+        };
+        FilterClients();
+    }
+    private void GoToAddPage()
+    {
+        if (!CanManageClients) return;
+        NavigationManager.NavigateTo("/clients/add");
+    }
+    private void GoToEditPage(int clientId)
+    {
+        if (!CanManageClients) return;
+        NavigationManager.NavigateTo($"/clients/edit/{clientId}");
+    }
+    private async Task DeleteClient(int clientId, string clientName)
+    {
+        if (!CanManageClients) return;
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete client '{clientName}'?");
+        if (confirmed && AppState.SelectedOrganization != null)
+        {
+            await using var configDbContext = await ConfigurationDbContextFactory.CreateDbContextAsync();
+            var clientToDelete = await configDbContext.Clients.FindAsync(clientId);
+
+            if (clientToDelete != null)
+            {
+                configDbContext.Clients.Remove(clientToDelete);
+                await using var appDbContext = await DbContextFactory.CreateDbContextAsync();
+                var ownershipToDelete = await appDbContext.ClientOwnerships
+                    .FirstOrDefaultAsync(co => co.ClientId == clientId && co.OrganizationId == AppState.SelectedOrganization.Id);
+                if(ownershipToDelete != null)
+                {
+                    appDbContext.ClientOwnerships.Remove(ownershipToDelete);
+                }
+
+                await configDbContext.SaveChangesAsync();
+                await appDbContext.SaveChangesAsync();
+                await LoadClientsAsync();
+            }
+        }
+    }
+    #endregion
+
+    public void Dispose()
+    {
+        AppState.OnChange -= HandleAppStateChange;
+    }
+}

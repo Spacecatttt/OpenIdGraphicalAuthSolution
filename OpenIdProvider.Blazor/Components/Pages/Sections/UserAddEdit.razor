@@ -206,7 +206,7 @@ else
                             <ul class="multi-select-dropdown">
                                 @foreach (var client in availableClients)
                                 {
-                                    <li @onclick="() => SelectClient(client.Id)">@client.ClientName (@client.Id)</li>
+                                    <li @onclick="() => SelectClient(client.Id)">@client.ClientName</li>
                                 }
                                 @if (!availableClients.Any())
                                 {
