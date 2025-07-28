@@ -12,6 +12,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupClaim> GroupClaims { get; set; }
     public DbSet<Organization> Organizations { get; set; }
+    public DbSet<UserOrganizationRole> UserOrganizationRoles { get; set; }
+    public DbSet<ClientOwnership> ClientOwnerships { get; set; }
+    public DbSet<OrganizationClientPermission> OrganizationClientPermissions { get; set; }
+    public DbSet<UserClientPermission> UserClientPermissions { get; set; }
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -27,14 +31,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
 
 
         builder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
-
-
-        //builder.ApplyConfiguration(new ApplicationUserConfiguration());
-        //builder.ApplyConfiguration(new GroupConfiguration());
-        //builder.ApplyConfiguration(new GroupClaimConfiguration());
-        //builder.ApplyConfiguration(new UserGroupConfiguration());
-        //builder.ApplyConfiguration(new OrganizationConfiguration());
-
     }
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

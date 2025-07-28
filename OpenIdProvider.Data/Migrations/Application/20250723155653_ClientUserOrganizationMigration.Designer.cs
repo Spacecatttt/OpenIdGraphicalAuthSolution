@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OpenIdProvider.Data;
@@ -11,9 +12,11 @@ using OpenIdProvider.Data;
 namespace OpenIdProvider.Data.Migrations.Application
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250723155653_ClientUserOrganizationMigration")]
+    partial class ClientUserOrganizationMigration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -280,9 +283,6 @@ namespace OpenIdProvider.Data.Migrations.Application
                     b.Property<int>("ClientId")
                         .HasColumnType("integer");
 
-                    b.Property<bool>("EnableSignup")
-                        .HasColumnType("boolean");
-
                     b.HasKey("OrganizationId", "ClientId");
 
                     b.ToTable("ClientOwnerships");
@@ -380,8 +380,8 @@ namespace OpenIdProvider.Data.Migrations.Application
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("ClientId")
-                        .HasColumnType("integer");
+                    b.Property<string>("ClientId")
+                        .HasColumnType("text");
 
                     b.HasKey("OrganizationId", "ClientId");
 
@@ -393,8 +393,8 @@ namespace OpenIdProvider.Data.Migrations.Application
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("ClientId")
-                        .HasColumnType("integer");
+                    b.Property<string>("ClientId")
+                        .HasColumnType("text");
 
                     b.HasKey("UserId", "ClientId");
 

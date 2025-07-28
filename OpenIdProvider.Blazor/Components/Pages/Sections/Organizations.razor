@@ -1,0 +1,346 @@
+@page "/organizations"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using OpenIdProvider.Blazor.Services
+
+@inject ILogger<Organizations> Logger
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject NavigationManager NavigationManager
+@inject AppState AppState
+@inject IJSRuntime JSRuntime
+
+
+<PageTitle>Organizations</PageTitle>
+
+@if (isLoading)
+{
+    <div class="status-container">
+        <p class="status-message"><em>Loading...</em></p>
+    </div>
+}
+else
+{
+    <div class="page-container">
+        <div class="page-header">
+            <h1>Organizations</h1>
+            <button type="button" @onclick="GoToAddPage" class="btn btn-primary">
+                <img src="/images/table/add.png" alt="Add" class="btn-icon" />
+                <span>Add</span>
+            </button>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="org-table">
+                <thead>
+                    <tr>
+                        <th>
+                            <div class="filter-controls">
+                                <span>Name</span>
+                                <input @bind="nameSearch" @bind:event="oninput" class="filter-input" type="text"
+                                    placeholder="Search..." />
+                            </div>
+                        </th>
+                        <th>
+                            <div class="filter-controls">
+                                <span>Created time</span>
+                                <button type="button" @onclick="ApplySort" class="sort-btn">
+                                    @if (sortOrder == "date_asc")
+                                    {
+                                        <img src="/images/table/sort_up.png" alt="Sorted Ascending" />
+                                    }
+                                    else if (sortOrder == "date_desc")
+                                    {
+                                        <img src="/images/table/sort_down.png" alt="Sorted Descending" />
+                                    }
+                                    else
+                                    {
+                                        <img src="/images/table/sort.png" alt="Sort" />
+                                    }
+                                </button>
+                            </div>
+                        </th>
+                        <th>
+                            <div class="filter-controls">
+                                <span>Slug</span>
+                                <input @bind="slugSearch" @bind:event="oninput" class="filter-input" type="text"
+                                    placeholder="Search..." />
+                            </div>
+                        </th>
+                        <th colspan="2">
+                            <div class="filter-controls">
+                                <button type="button" @onclick="ClearFilters"
+                                    class="btn btn-secondary w-full text-xs py-2 ml-auto">Clear</button>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var org in organizations)
+                    {
+                        <tr>
+                            <td>@org.Name</td>
+                            <td class="text-sm text-text-secondary">@org.CreatedDate.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="text-sm text-blue-500">
+                                <a href="/@org.Slug" target="_blank" rel="noopener noreferrer"
+                                    class="hover:underline">@org.Slug</a>
+                            </td>
+                            <td colspan="2">
+                                <div class="action-btn-group">
+                                    <button @onclick='() => GoToGroupsPage(org.Slug)'
+                                        class="action-btn btn-manage">Groups</button>
+                                    <button @onclick='() => GoToUsersPage(org.Slug)'
+                                        class="action-btn btn-manage">Users</button>
+
+                                    <button @onclick='() => GoToEditPage(org.Id)' class="action-btn btn-edit"
+                                        disabled="@(GetUserRoleForOrg(org.Id) < OrganizationRole.Admin)">Edit</button>
+                                    <button @onclick='() => DeleteOrganization(org.Id, org.Name)' class="action-btn btn-delete"
+                                        disabled="@(GetUserRoleForOrg(org.Id) < OrganizationRole.Owner)">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    @if (!organizations.Any())
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center text-text-secondary py-8">No organizations found.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="page-footer">
+            <div>
+                <span>@totalOrganizations in total</span>
+            </div>
+            <div class="pagination-controls">
+                <button type="button" @onclick="() => ChangePage(currentPage - 1)" disabled="@(currentPage <= 1)"
+                    class="pagination-btn">
+                    <img src="/images/table/arrow-right.png" alt="Previous" class="btn-icon flipped-horizontally" />
+                </button>
+                <span>@currentPage / @totalPages</span>
+                <button type="button" @onclick="() => ChangePage(currentPage + 1)" disabled="@(currentPage >= totalPages)"
+                    class="pagination-btn">
+                    <img src="/images/table/arrow-right.png" alt="Next" class="btn-icon" />
+                </button>
+                <select @bind="pageSize" class="page-size-selector">
+                    <option value="10">10 / page</option>
+                    <option value="20">20 / page</option>
+                    <option value="50">50 / page</option>
+                </select>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<Organization> organizations = new();
+
+    // State for sorting and pagination
+    private string? sortOrder;
+    private int currentPage = 1;
+    private int totalPages;
+    private int totalOrganizations;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AppState.CurrentUser != null)
+        {
+            await LoadOrganizationsAsync();
+        }
+        else
+        {
+            AppState.OnChange += LoadDataAfterStateInit;
+        }
+    }
+    private async void LoadDataAfterStateInit()
+    {
+        AppState.OnChange -= LoadDataAfterStateInit;
+        await InvokeAsync(LoadOrganizationsAsync);
+    }
+
+    private Task LoadOrganizationsAsync()
+    {
+        if (AppState.CurrentUser == null)
+        {
+            isLoading = false;
+            return Task.CompletedTask;
+        }
+
+        var query = AppState.UserOrganizations.AsQueryable();
+        // Apply filtering using the backing fields
+        if (!string.IsNullOrWhiteSpace(_nameSearch))
+        {
+            query = query.Where(o => o.Name.Contains(_nameSearch));
+        }
+        if (!string.IsNullOrWhiteSpace(_slugSearch))
+        {
+            query = query.Where(o => o.Slug.Contains(_slugSearch));
+        }
+
+        // Apply sorting
+        switch (sortOrder)
+        {
+            case "date_asc":
+                query = query.OrderBy(o => o.CreatedDate);
+                break;
+            case "date_desc":
+                query = query.OrderByDescending(o => o.CreatedDate);
+                break;
+            default:
+                query = query.OrderBy(o => o.Name);
+                break;
+        }
+
+        // Get total count for pagination
+        totalOrganizations = query.Count();
+        totalPages = (int)Math.Ceiling(totalOrganizations / (double)_pageSize);
+        if (totalPages == 0) totalPages = 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+
+        // Apply pagination
+        organizations = query
+        .Skip((currentPage - 1) * _pageSize)
+        .Take(_pageSize)
+        .ToList();
+
+        isLoading = false;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private OrganizationRole GetUserRoleForOrg(Guid orgId)
+    {
+        if (AppState.CurrentUser == null) return OrganizationRole.Viewer;
+
+        if (AppState.CurrentUser.PrimaryOrganizationId == orgId)
+        {
+            return OrganizationRole.Owner;
+        }
+
+        var managedRole = AppState.CurrentUser.ManagedOrganizations
+        .FirstOrDefault(mo => mo.OrganizationId == orgId);
+
+        return managedRole?.Role ?? OrganizationRole.Viewer;
+    }
+
+    // Properties for filtering with debouncing
+    private string? _nameSearch;
+    private string? nameSearch
+    {
+        get => _nameSearch;
+        set
+        {
+            _nameSearch = value;
+            Debounce(async () => await LoadOrganizationsAsync());
+        }
+    }
+    private string? _slugSearch;
+    private string? slugSearch
+    {
+        get => _slugSearch;
+        set
+        {
+            _slugSearch = value;
+            Debounce(async () => await LoadOrganizationsAsync());
+        }
+    }
+
+    // Property for page size to auto-reload data
+    private int _pageSize = 10;
+    private int pageSize
+    {
+        get => _pageSize;
+        set
+        {
+            if (_pageSize != value)
+            {
+                _pageSize = value;
+                currentPage = 1; // Reset to first page
+                InvokeAsync(LoadOrganizationsAsync);
+            }
+        }
+    }
+
+    private System.Threading.Timer? _debounceTimer;
+    private void Debounce(Func<Task> action, int milliseconds = 300)
+    {
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(action);
+        }, null, milliseconds, System.Threading.Timeout.Infinite);
+    }
+
+    // Event handlers
+    private async Task ApplyFilters() => await LoadOrganizationsAsync();
+
+    private async Task ClearFilters()
+    {
+        _nameSearch = string.Empty;
+        _slugSearch = string.Empty;
+        await LoadOrganizationsAsync();
+    }
+
+    private async Task ApplySort()
+    {
+        sortOrder = sortOrder switch
+        {
+            "date_asc" => "date_desc",
+            "date_desc" => "",
+            _ => "date_asc"
+        };
+        await LoadOrganizationsAsync();
+    }
+
+    private async Task ChangePage(int newPage)
+    {
+        if (newPage > 0 && newPage <= totalPages)
+        {
+            currentPage = newPage;
+            await LoadOrganizationsAsync();
+        }
+    }
+
+    // Navigation and Actions
+    private void GoToAddPage() => NavigationManager.NavigateTo("/organizations/add");
+    private void GoToEditPage(Guid id) => NavigationManager.NavigateTo($"/organizations/edit/{id}");
+    private void GoToGroupsPage(string slug)
+    {
+        AppState.SetSelectedOrganization(slug);
+        NavigationManager.NavigateTo("/groups");
+    }
+
+    private void GoToUsersPage(string slug)
+    {
+        AppState.SetSelectedOrganization(slug);
+        NavigationManager.NavigateTo("/users");
+    }
+
+    private async Task DeleteOrganization(Guid id, string name)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete '{name}'?");
+        if (confirmed)
+        {
+            await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+            var orgToDelete = await dbContext.Organizations.FindAsync(id);
+            if (orgToDelete != null)
+            {
+                dbContext.Organizations.Remove(orgToDelete);
+                await dbContext.SaveChangesAsync();
+                Logger.LogInformation("Organization with ID {id} deleted.", id);
+
+                await AppState.InitializeAsync(true);
+                await LoadOrganizationsAsync(); // Refresh the list
+            }
+            else
+            {
+                Logger.LogWarning("Attempted to delete non-existent organization with ID: {id}", id);
+            }
+        }
+    }
+}

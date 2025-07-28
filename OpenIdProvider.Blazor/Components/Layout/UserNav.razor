@@ -1,0 +1,108 @@
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using System.Security.Claims
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject AppState AppState
+
+@implements IDisposable
+
+@if (AppState.CurrentUser != null)
+{
+    <select name="selectedOrganizationId" id="organization-selector" class="form-select org-selector"
+        @onchange="OnOrganizationChanged" value="@AppState.SelectedOrganization?.Slug">
+        @foreach (var org in AppState.UserOrganizations)
+        {
+            <option value="@org.Slug">
+                @org.Name
+            </option>
+        }
+    </select>
+
+    <a @onclick="ToggleTheme" class="icon-btn" id="theme-toggle" title="Toggle theme">
+        @(AppState.IsLightTheme ? "☀️" : "🌙")
+    </a>
+
+    <div class="profile-container">
+        <div class="profile" id="profile-trigger" @onclick="ToggleProfileDropdown">
+            <img
+                src="@(AppState.CurrentUser.AvatarUrl ?? $"https://placehold.co/32x32/8A42D8/FFFFFF?text={AppState.CurrentUser.DisplayName?.Substring(0, 1).ToUpper()}")" />
+            <span>@AppState.CurrentUser.DisplayName</span>
+        </div>
+
+        <div class="profile-dropdown @(isProfileDropdownVisible ? "show" : "")" id="profile-dropdown-menu">
+            <a href="/account/manage">Settings</a>
+            <form action="/account/logout" method="post">
+                <AntiforgeryToken />
+                <button type="submit" class="dropdown-item-button">
+                    <span>Logout</span>
+                </button>
+            </form>
+        </div>
+    </div>
+}
+else
+{
+    <p>Loading...</p>
+}
+
+@code {
+
+    private bool isProfileDropdownVisible = false;
+    private DotNetObjectReference<UserNav>? objRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AppState.OnChange += StateHasChanged;
+        await AppState.InitializeAsync();
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            objRef = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("themeInterop.setDotNetHelper", objRef);
+        }
+    }
+    [JSInvokable]
+    public void UpdateThemeState(bool isLight)
+    {
+        if (AppState.IsLightTheme != isLight)
+        {
+            AppState.SetTheme(isLight);
+        }
+    }
+
+    private void OnOrganizationChanged(ChangeEventArgs e)
+    {
+        var newOrgSlug = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(newOrgSlug))
+        {
+            AppState.SetSelectedOrganization(newOrgSlug);
+        }
+    }
+
+    private void ToggleProfileDropdown()
+    {
+        isProfileDropdownVisible = !isProfileDropdownVisible;
+    }
+
+    private async Task ToggleTheme()
+    {
+        await JSRuntime.InvokeVoidAsync("themeInterop.toggle");
+    }
+    public void Dispose()
+    {
+        AppState.OnChange -= StateHasChanged;
+        objRef?.Dispose();
+    }
+}

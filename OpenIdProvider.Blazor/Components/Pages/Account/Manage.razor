@@ -1,0 +1,530 @@
+@page "/account/manage"
+@attribute [Authorize]
+@layout MainLayout
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Blazor.Services
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+
+@inject ILogger<Manage> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+@inject AppState AppState
+@inject IHelperService HelperService
+
+
+<PageTitle>Manage Account</PageTitle>
+
+@if (isLoading)
+{
+    <div class="status-container">
+        <p class="status-message"><em>Loading profile...</em></p>
+    </div>
+}
+else
+{
+    <div class="form-container">
+        <div class="form-header">
+            <h1>Manage Your Account</h1>
+        </div>
+
+        <EditForm Model="profileModel" OnValidSubmit="HandleProfileSave">
+            <DataAnnotationsValidator />
+
+            <h2 class="form-section-header">Profile Information</h2>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="displayName">Display Name</label>
+                    <InputText id="displayName" @bind-Value="profileModel.DisplayName" class="form-input" />
+                    <ValidationMessage For="@(() => profileModel.DisplayName)" />
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <InputText id="email" @bind-Value="profileModel.Email" class="form-input" disabled />
+                </div>
+                <div class="form-group">
+                    <label for="avatarUrl">Avatar URL</label>
+                    <InputText id="avatarUrl" @bind-Value="profileModel.AvatarUrl" class="form-input" />
+                    <ValidationMessage For="@(() => profileModel.AvatarUrl)" />
+                </div>
+                <div class="form-group">
+                    <label for="country">Country</label>
+                    <InputText id="country" @bind-Value="profileModel.Country" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label for="location">Location / City</label>
+                    <InputText id="location" @bind-Value="profileModel.Location" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label for="address">Address</label>
+                    <InputText id="address" @bind-Value="profileModel.Address" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label for="bio">Bio</label>
+                    <InputTextArea id="bio" @bind-Value="profileModel.Bio" class="form-textarea" rows="3" />
+                </div>
+
+                <div class="form-group">
+                    <label>Your Groups</label>
+                    <div class="multi-select-wrapper">
+                        <div class="multi-select-container" @onclick="() => isGroupDropdownOpen = !isGroupDropdownOpen">
+                            @if (!profileModel.SelectedGroups.Any())
+                            {
+                                <span class="multi-select-placeholder">Select a group to join...</span>
+                            }
+                            @foreach (var group in profileModel.SelectedGroups)
+                            {
+                                <div class="selected-item">
+                                    <span>@group.Name</span>
+                                    <button type="button" class="remove-item-btn"
+                                        @onclick="() => profileModel.SelectedGroups.Remove(group)"
+                                        @onclick:stopPropagation>&times;</button>
+                                </div>
+                            }
+                        </div>
+                        @if (isGroupDropdownOpen)
+                        {
+                            <ul class="multi-select-dropdown">
+                                @foreach (var group in availableGroups)
+                                {
+                                    <li @onclick="() => SelectGroup(group)">@group.Name</li>
+                                }
+                                @if (!availableGroups.Any())
+                                {
+                                    <li class="disabled">No other groups available to join.</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="primaryOrg">Primary Organization</label>
+                    <InputSelect @bind-Value="profileModel.PrimaryOrganizationId" class="form-input" TValue="Guid">
+                        @foreach (var org in ownedOrganizations)
+                        {
+                            <option value="@org.Id">@org.Name</option>
+                        }
+                    </InputSelect>
+                    <small class="text-muted mt-1">This is your default organization when you log in.</small>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(profileStatusMessage))
+            {
+                <div class="alert @(isProfileError ? "alert-error" : "alert-success")">
+                    @if (isProfileError)
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg" class="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    }
+                    else
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg" class="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    }
+                    <span>@profileStatusMessage</span>
+                </div>
+            }
+
+            <div class="form-footer">
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <button type="button" class="btn btn-secondary" @onclick="HandleProfileSaveAndExit">Save Changes &
+                    Exit</button>
+            </div>
+        </EditForm>
+
+        <hr class="form-divider" />
+
+        <EditForm Model="passwordModel" OnValidSubmit="HandlePasswordChange">
+            <DataAnnotationsValidator />
+
+            <h2 class="form-section-header">Change Password</h2>
+            <div class="form-grid">
+                @if (!string.IsNullOrEmpty(passwordStatusMessage))
+                {
+                    <div class="alert @(isPasswordError ? "alert-error" : "alert-success")">
+                        @passwordStatusMessage
+                    </div>
+                }
+
+                <div class="form-group">
+                    <label for="currentPassword">Current Password</label>
+                    <div class="password-input-wrapper">
+                        <InputText id="currentPassword" @bind-Value="passwordModel.CurrentPassword"
+                            type="@currentPasswordFieldType" class="form-input" />
+                        <div class="password-buttons">
+                            <button type="button" class="password-btn" @onclick="ToggleCurrentPasswordVisibility"
+                                title="Show/Hide Password">
+                                <img src="@(currentPasswordFieldType == "password" ?
+                                                                                                             "/images/security/eye_show.png" :
+                                                                                                             "/images/security/eye_hide.png")"
+                                    alt="Show/Hide" />
+                            </button>
+                        </div>
+                    </div>
+                    <ValidationMessage For="@(() => passwordModel.CurrentPassword)" />
+                </div>
+
+                <div class="form-group">
+                    <label for="newPassword">New Password</label>
+                    <div class="password-input-wrapper">
+                        <InputText id="newPassword" @bind-Value="passwordModel.NewPassword" type="@newPasswordFieldType"
+                            class="form-input" />
+
+                        <div class="password-buttons">
+                            <button type="button" class="password-btn" title="Generate Password"
+                                @onclick="() => passwordModel.NewPassword = HelperService.GeneratePassword(16)">
+                                <img src="/images/security/generate_password.png" alt="Generate" />
+                            </button>
+                            <button type="button" class="password-btn" @onclick="TogglePasswordVisibility"
+                                title="Show/Hide Password">
+                                <img src="@(newPasswordFieldType == "password" ?
+                                                                                                         "/images/security/eye_show.png" :
+                                                                                                         "/images/security/eye_hide.png")"
+                                    alt="Show/Hide" />
+                            </button>
+                        </div>
+                    </div>
+                    <ValidationMessage For="@(() => passwordModel.NewPassword)" />
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm New Password</label>
+                    <div class="password-input-wrapper">
+                        <InputText id="confirmPassword" @bind-Value="passwordModel.ConfirmPassword"
+                            type="@newPasswordFieldType" class="form-input" />
+                        <div class="password-buttons">
+                            <button type="button" class="password-btn" @onclick="TogglePasswordVisibility"
+                                title="Show/Hide Password">
+                                <img src="@(newPasswordFieldType == "password" ?
+                                                                                                         "/images/security/eye_show.png" :
+                                                                                                         "/images/security/eye_hide.png")"
+                                    alt="Show/Hide" />
+                            </button>
+                        </div>
+                    </div>
+                    <ValidationMessage For="@(() => passwordModel.ConfirmPassword)" />
+                </div>
+            </div>
+
+            <div class="form-footer">
+                <button type="submit" class="btn btn-primary">Change Password</button>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    #region Parameters & State
+    private bool isLoading = true;
+    private ProfileViewModel profileModel = new();
+    private List<Organization> ownedOrganizations = new();
+    private string? profileStatusMessage;
+    private bool isProfileError;
+
+    // --- Password State ---
+    private PasswordChangeViewModel passwordModel = new();
+    private string? passwordStatusMessage;
+    private bool isPasswordError;
+    private string newPasswordFieldType = "password";
+    private string currentPasswordFieldType = "password";
+
+    // --- Group Selection State ---
+    private bool isGroupDropdownOpen = false;
+    private List<GroupViewModel> allUserGroups = new();
+    private List<GroupViewModel> availableGroups => allUserGroups.Except(profileModel.SelectedGroups).ToList();
+    #endregion
+
+    #region Lifecycle & Data Loading
+    protected override async Task OnInitializedAsync()
+    {
+        if (AppState.CurrentUser == null)
+        {
+            AppState.OnChange += HandleAppStateChange;
+        }
+        else
+        {
+            await LoadProfileDataAsync();
+        }
+    }
+    private async Task LoadProfileDataAsync()
+    {
+        var appStateUser = AppState.CurrentUser;
+        if (appStateUser == null)
+        {
+            profileStatusMessage = "Error: Could not load user profile.";
+            isProfileError = true;
+            isLoading = false;
+            return;
+        }
+
+
+        await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+        var user = await dbContext.Users
+        .Include(u => u.Groups)
+        .AsNoTracking()
+        .FirstOrDefaultAsync(u => u.Id == appStateUser.Id);
+
+        if (user == null)
+        {
+            profileStatusMessage = "Error: Could not find the user in the database.";
+            isProfileError = true;
+            isLoading = false;
+            return;
+        }
+
+        profileModel = new ProfileViewModel
+        {
+            DisplayName = user.DisplayName,
+            Email = user.Email ?? string.Empty,
+            AvatarUrl = user.AvatarUrl,
+            Bio = user.Bio,
+            Country = user.Country,
+            Location = user.Location,
+            Address = user.Address,
+            SelectedGroups = user.Groups.Select(g => new GroupViewModel { Id = g.Id, Name = g.Name }).ToList(),
+            PrimaryOrganizationId = user.PrimaryOrganizationId
+        };
+
+        ownedOrganizations = AppState.UserOrganizations
+        .Where(org => org.Id == user.PrimaryOrganizationId ||
+        user.ManagedOrganizations.Any(
+        mo => mo.OrganizationId == org.Id &&
+        mo.Role == OrganizationRole.Owner
+        )
+        )
+        .DistinctBy(o => o.Id)
+        .ToList();
+
+        var userOrgIds = AppState.UserOrganizations.Select(o => o.Id).ToList();
+        allUserGroups = await dbContext.Groups
+        .AsNoTracking()
+        .Where(g => userOrgIds.Contains(g.OrganizationId))
+        .Select(g => new GroupViewModel { Id = g.Id, Name = g.Name })
+        .ToListAsync();
+
+        isLoading = false;
+        StateHasChanged();
+    }
+    private async void HandleAppStateChange()
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadProfileDataAsync();
+            AppState.OnChange -= HandleAppStateChange;
+        });
+    }
+    #endregion
+
+    #region Profile & Password Save Logic
+    private async Task HandleProfileSave()
+    {
+        profileStatusMessage = null;
+        isProfileError = false;
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userId = UserManager.GetUserId(authState.User);
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            profileStatusMessage = "Error: User not found.";
+            isProfileError = true;
+            return;
+        }
+
+        try
+        {
+            await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+
+            var userToUpdate = await dbContext.Users
+            .Include(u => u.Groups)
+            .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+
+            if (userToUpdate == null)
+            {
+                profileStatusMessage = "Error: User could not be loaded from the database.";
+                isProfileError = true;
+                return;
+            }
+
+            userToUpdate.DisplayName = profileModel.DisplayName;
+            userToUpdate.AvatarUrl = profileModel.AvatarUrl;
+            userToUpdate.Bio = profileModel.Bio;
+            userToUpdate.Country = profileModel.Country;
+            userToUpdate.Location = profileModel.Location;
+            userToUpdate.Address = profileModel.Address;
+
+            var selectedGroupIds = profileModel.SelectedGroups.Select(g => g.Id).ToHashSet();
+            var candidateGroups = await dbContext.Groups.Where(g => selectedGroupIds.Contains(g.Id)).ToListAsync();
+            userToUpdate.Groups.SyncCollection(
+            viewModelItems: profileModel.SelectedGroups,
+            entityKeySelector: group => group.Id,
+            viewModelKeySelector: vm => vm.Id,
+            creator: vm => candidateGroups.First(g => g.Id == vm.Id)
+            );
+
+            // Processing a change in the primary organization
+            if (userToUpdate.PrimaryOrganizationId != profileModel.PrimaryOrganizationId)
+            {
+                var oldPrimaryOrgId = userToUpdate.PrimaryOrganizationId;
+                userToUpdate.PrimaryOrganizationId = profileModel.PrimaryOrganizationId;
+
+                if (oldPrimaryOrgId != Guid.Empty)
+                {
+                    var existingRoleForOldOrg = await dbContext.UserOrganizationRoles
+                    .FirstOrDefaultAsync(r => r.UserId == userToUpdate.Id &&
+                    r.OrganizationId == oldPrimaryOrgId);
+
+                    if (existingRoleForOldOrg == null)
+                    {
+                        dbContext.UserOrganizationRoles.Add(
+                        new UserOrganizationRole
+                        {
+                            UserId = userToUpdate.Id,
+                            OrganizationId = oldPrimaryOrgId,
+                            Role = OrganizationRole.Owner
+                        }
+                        );
+                    }
+                }
+
+                var existingRoleForNewOrg = await dbContext.UserOrganizationRoles
+                .FirstOrDefaultAsync(r => r.UserId == userToUpdate.Id &&
+                r.OrganizationId == profileModel.PrimaryOrganizationId);
+
+                if (existingRoleForNewOrg != null)
+                {
+                    dbContext.UserOrganizationRoles.Remove(existingRoleForNewOrg);
+                }
+            }
+
+            var result = await dbContext.SaveChangesAsync();
+            if (result > 0)
+            {
+                profileStatusMessage = "Your profile has been updated successfully.";
+                await AppState.InitializeAsync(forceRefresh: true);
+                await LoadProfileDataAsync();
+            }
+            else
+            {
+                profileStatusMessage = "No changes were detected.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving profile.");
+            profileStatusMessage = "An unexpected error occurred while saving.";
+            isProfileError = true;
+        }
+    }
+    private async Task HandleProfileSaveAndExit()
+    {
+        await HandleProfileSave();
+        if (!isProfileError)
+        {
+            NavigationManager.NavigateTo("/");
+        }
+    }
+    private async Task HandlePasswordChange()
+    {
+        passwordStatusMessage = null;
+        isPasswordError = false;
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+        if (user == null)
+        {
+            passwordStatusMessage = "Error: Could not find user.";
+            isPasswordError = true;
+            return;
+        }
+
+        var result = await UserManager.ChangePasswordAsync(user, passwordModel.CurrentPassword, passwordModel.NewPassword);
+
+        if (result.Succeeded)
+        {
+            passwordStatusMessage = "Your password has been changed successfully.";
+            passwordModel = new(); // Reset the form
+        }
+        else
+        {
+            passwordStatusMessage = $"Error: {string.Join(", ", result.Errors.Select(e => e.Description))}";
+            isPasswordError = true;
+        }
+    }
+    #endregion
+
+    #region Event Handlers Logic
+    private void TogglePasswordVisibility()
+    {
+        newPasswordFieldType = newPasswordFieldType == "password" ? "text" : "password";
+    }
+    private void ToggleCurrentPasswordVisibility()
+    {
+        currentPasswordFieldType = currentPasswordFieldType == "password" ? "text" : "password";
+    }
+    private void SelectGroup(GroupViewModel group)
+    {
+        if (!profileModel.SelectedGroups.Any(g => g.Id == group.Id))
+        {
+            profileModel.SelectedGroups.Add(group);
+        }
+        isGroupDropdownOpen = false;
+    }
+    #endregion
+
+    #region View Models
+    public class ProfileViewModel
+    {
+        [Required]
+        public string DisplayName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+
+        [Url(ErrorMessage = "Please enter a valid URL.")]
+        public string? AvatarUrl { get; set; }
+        public string? Bio { get; set; }
+        public string? Country { get; set; }
+        public string? Location { get; set; }
+        public string? Address { get; set; }
+        public List<GroupViewModel> SelectedGroups { get; set; } = new();
+        public Guid PrimaryOrganizationId { get; set; }
+    }
+
+    public class GroupViewModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public override bool Equals(object? obj) => obj is GroupViewModel other && Id.Equals(other.Id);
+        public override int GetHashCode() => Id.GetHashCode();
+    }
+
+    public class PasswordChangeViewModel
+    {
+        [Required]
+        [DataType(DataType.Password)]
+        public string CurrentPassword { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [DataType(DataType.Password)]
+        public string NewPassword { get; set; } = string.Empty;
+
+        [DataType(DataType.Password)]
+        [Compare("NewPassword", ErrorMessage = "The new password and confirmation password do not match.")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+    #endregion
+}

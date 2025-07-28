@@ -1,0 +1,85 @@
+html {
+    font-size: 14px;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+}
+
+footer {
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.btn:focus,
+.btn:active:focus,
+.btn-link.nav-link:focus,
+.form-control:focus,
+.form-check-input:focus {
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+}
+
+/* Theme variables */
+:root {
+    --bg-color: #ffffff;
+    --secondary-bg: #f3f4f6;
+    --border-color: #e5e7eb;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --accent-purple: #8A42D8;
+    --accent-active: #e9ecef;
+    --chart-text-color: #495057;
+}
+
+:root.dark-theme {
+    --bg-color: #111015;
+    --secondary-bg: #1C1B22;
+    --border-color: #313037;
+    --text-primary: #F2F2F2;
+    --text-secondary: #A7A6AD;
+    --accent-purple: #8A42D8;
+    --accent-active: #2F2E36;
+    --chart-text-color: #e0e0e0;
+}
+
+.btn:disabled,
+.action-btn:disabled,
+.pagination-btn:disabled {
+    background-color: var(--border-color) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border-color) !important;
+    opacity: 0.7;
+    cursor: not-allowed;
+    box-shadow: none;
+    filter: none;
+}
+
+/* Container for centering status messages (e.g., loading, no data) */
+.status-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 70vh;
+}
+
+/* The status message text */
+.status-message {
+    font-size: 1.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+@media (min-width: 768px) {
+    html {
+        font-size: 16px;
+    }
+}

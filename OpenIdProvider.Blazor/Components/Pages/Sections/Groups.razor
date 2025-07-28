@@ -1,0 +1,179 @@
+@page "/groups"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using OpenIdProvider.Blazor.Services
+
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject NavigationManager NavigationManager
+@inject AppState AppState
+@inject ILogger<Groups> Logger
+@inject IJSRuntime JSRuntime
+
+@implements IDisposable
+
+<PageTitle>Groups for @(AppState.SelectedOrganization?.Name ?? "Selected Organization")</PageTitle>
+
+@if (isLoading)
+{
+    <div class="status-container">
+        <p class="status-message"><em>Loading...</em></p>
+    </div>
+}
+else if (AppState.SelectedOrganization == null)
+{
+    <div class="page-container">
+        <div class="page-header">
+             <h1>Groups</h1>
+        </div>
+        <p class="info-message">Please select an organization from the navigation bar to view its groups.</p>
+    </div>
+}
+else
+{
+    <div class="page-container">
+        <div class="page-header">
+            <h1>Groups in @AppState.SelectedOrganization.Name</h1>
+            <button type="button" @onclick="GoToAddPage" class="btn btn-primary">
+                <img src="/images/table/add.png" alt="Add Group" class="btn-icon" />
+                <span>Add Group</span>
+            </button>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="org-table">
+                <thead>
+                    <tr>
+                        <th>
+                            <div class="filter-controls">
+                                <span>Name</span>
+                                <input @bind="nameSearch" @bind:event="oninput" class="filter-input" type="text" placeholder="Search..." />
+                            </div>
+                        </th>
+                        <th>Description</th>
+                        <th>Organization</th>
+                        <th>Users</th>
+                        <th colspan="2">
+                            <div class="filter-controls">
+                                <button type="button" @onclick="ClearFilters" class="btn btn-secondary w-full text-xs py-2 ml-auto">Clear</button>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var group in groups)
+                    {
+                        <tr>
+                            <td>@group.Name</td>
+                            <td class="text-sm text-text-secondary">@group.Description</td>
+                            <td class="text-sm text-text-secondary">@AppState.SelectedOrganization.Name</td>
+                            <td class="text-sm text-text-secondary">@group.Users.Count</td>
+                            <td colspan="2">
+                                <div class="action-btn-group">
+                                    <button @onclick='() => GoToEditPage(group.Id)' class="action-btn btn-edit" disabled="@(!CanManageGroups)">Edit</button>
+                                    <button @onclick='() => DeleteGroup(group.Id, group.Name)' class="action-btn btn-delete" disabled="@(!CanManageGroups)">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    @if (!groups.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-text-secondary py-8">No groups found in this organization.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="page-footer">
+            <div>
+                <span>@totalGroups in total</span>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<Group> groups = new();
+    private List<Group> allGroupsForOrg = new();
+    private int totalGroups;
+
+    private bool CanManageGroups => AppState.CurrentUserRoleInSelectedOrg >= OrganizationRole.Admin;
+
+    private string? _nameSearch;
+    private string? nameSearch { get => _nameSearch; set { _nameSearch = value; FilterGroups(); } }
+
+    protected override async Task OnInitializedAsync()
+    {
+        AppState.OnChange += HandleStateChange;
+        await LoadGroupsAsync();
+    }
+    private async void HandleStateChange()
+    {
+        await InvokeAsync(LoadGroupsAsync);
+    }
+    private async Task LoadGroupsAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        if (AppState.SelectedOrganization == null)
+        {
+            allGroupsForOrg.Clear();
+        }
+        else
+        {
+            await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+            allGroupsForOrg = await dbContext.Groups
+                .Include(g => g.Users)
+                .Where(g => g.OrganizationId == AppState.SelectedOrganization.Id)
+                .AsNoTracking()
+                .OrderBy(g => g.Name)
+                .ToListAsync();
+        }
+
+        FilterGroups();
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private void FilterGroups()
+    {
+        var query = allGroupsForOrg.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(_nameSearch))
+        {
+            query = query.Where(g => g.Name.Contains(_nameSearch, StringComparison.OrdinalIgnoreCase));
+        }
+        groups = query.ToList();
+        totalGroups = groups.Count;
+    }
+    private void ClearFilters() => nameSearch = string.Empty;
+
+    private void GoToAddPage() => NavigationManager.NavigateTo("/groups/add");
+    private void GoToEditPage(Guid groupId) => NavigationManager.NavigateTo($"/groups/edit/{groupId}");
+    private async Task DeleteGroup(Guid groupId, string groupName)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete group '{groupName}'?");
+        if (confirmed)
+        {
+            await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+            var groupToDelete = await dbContext.Groups.FindAsync(groupId);
+            if (groupToDelete != null)
+            {
+                dbContext.Groups.Remove(groupToDelete);
+                await dbContext.SaveChangesAsync();
+                await LoadGroupsAsync();
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        AppState.OnChange -= HandleStateChange;
+    }
+}

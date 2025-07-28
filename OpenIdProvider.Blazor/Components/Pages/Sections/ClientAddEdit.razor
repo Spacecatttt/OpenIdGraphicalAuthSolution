@@ -1,0 +1,626 @@
+@page "/clients/add"
+@page "/clients/edit/{ClientId:int}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using Duende.IdentityServer.EntityFramework.Entities
+@using Duende.IdentityServer.Models
+@using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Blazor.Services
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using ClientEntity = Duende.IdentityServer.EntityFramework.Entities.Client
+
+@inject ILogger<ClientAddEdit> Logger
+@inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject IDbContextFactory<Duende.IdentityServer.EntityFramework.DbContexts.ConfigurationDbContext> ConfigurationDbContextFactory
+@inject NavigationManager NavigationManager
+@inject AppState AppState
+@inject IHelperService HelperService
+
+
+<PageTitle>Client</PageTitle>
+
+@if (isLoading)
+{
+    <div class="status-container">
+        <p class="status-message"><em>Loading...</em></p>
+    </div>
+}
+else if (AppState.SelectedOrganization == null)
+{
+    <div class="form-container">
+        <p class="error-message">An organization must be selected to manage clients.</p>
+    </div>
+}
+else if (!CanManageClients)
+{
+    <div class="form-container">
+        <p class="error-message">You do not have permission to manage clients in this organization.</p>
+    </div>
+}
+else
+{
+    <div class="form-container">
+        <div class="form-header">
+            <h1>@(IsNew ? "Add New Client to " + AppState.SelectedOrganization.Name : "Edit Client")</h1>
+            <button class="btn btn-secondary" @onclick="NavigateBack">
+                <img src="/images/table/back.png" alt="Back" class="btn-icon" />
+                <span>Back to Clients</span>
+            </button>
+        </div>
+
+        <EditForm Model="clientModel" OnValidSubmit="HandleSave">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+
+                <h2 class="form-section-header">Basic Information</h2>
+                <div class="form-group">
+                    <label for="clientName">Client Name<span class="required-asterisk">*</span></label>
+                    <InputText id="clientName" @bind-Value="clientModel.ClientName" class="form-input" />
+                    <ValidationMessage For="@(() => clientModel.ClientName)" />
+                </div>
+                <div class="form-group">
+                    <label for="clientUri">Client URI (Homepage)</label>
+                    <InputText id="clientUri"
+                        @bind-Value="clientModel.ClientUri"
+                        class="form-input"
+                        placeholder="https://my-app.com" />
+                </div>
+                <div class="form-group">
+                    <label for="logoUri">Logo URI</label>
+                    <InputText id="logoUri"
+                        @bind-Value="clientModel.LogoUri"
+                        class="form-input"
+                        placeholder="https://my-app.com/logo.png" />
+                </div>
+
+                <h2 class="form-section-header">Authentication & Flow</h2>
+                <div class="form-group">
+                    <label for="clientIdString">Client ID
+                        <span class="required-asterisk">*</span>
+                    </label>
+                    <InputText id="clientIdString"
+                        @bind-Value="clientModel.ClientIdString"
+                        class="form-input" />
+                    <ValidationMessage For="@(() => clientModel.ClientIdString)" />
+                </div>
+
+                <div class="form-group">
+                    <label>Client Secrets</label>
+                    @if (clientModel.ClientSecrets.Any(s => s.IsNew))
+                    {
+                        <div class="alert alert-info">
+                            <img src="/images/info.png" alt="Info" class="alert-icon" />
+                            <span>Please copy any new secrets. They will not be shown again after saving.</span>
+                        </div>
+                    }
+
+                    <div class="items-list">
+                        @if (!clientModel.ClientSecrets.Any())
+                        {
+                            <span class="text-muted">No secrets have been added yet.</span>
+                        }
+                        @foreach (var secret in clientModel.ClientSecrets)
+                        {
+                            <div class="list-item">
+                                <img src="/images/security/key.png" alt="Key" />
+                                <span class="@(secret.IsNew ? "secret-value-new" : "")">
+                                    @(secret.IsNew ? secret.Value : (secret.Description ?? "No description"))
+                                </span>
+                                <button type="button" class="remove-item-btn"
+                                        @onclick="() => clientModel.ClientSecrets.Remove(secret)"
+                                        title="Remove secret">
+                                    &times;
+                                </button>
+                            </div>
+                            @if (secret.IsNew && !string.IsNullOrWhiteSpace(secret.Description))
+                            {
+                                <div class="list-item-description">
+                                    @secret.Description
+                                </div>
+                            }
+                        }
+                    </div>
+
+                    <div class="add-item-form-vertical">
+                        <label class="form-label-sm">Add New Secret</label>
+
+                        <div class="password-input-wrapper">
+                            <input @bind="newSecretValue" placeholder="Enter or generate a secret value" class="form-input" />
+                            <div class="password-buttons">
+                                <button type="button" class="password-btn" title="Generate Secret"
+                                        @onclick="() => newSecretValue = HelperService.GenerateRandomString(32)">
+                                    <img src="/images/security/generate_password.png" alt="Generate" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <input @bind="newSecretDescription" placeholder="Add a description (e.g., 'Primary API Key')" class="form-input mt-2" />
+
+                        <button type="button" class="btn btn-secondary mt-2 align-self-start" @onclick="AddSecret">Add Secret</button>
+                    </div>
+                </div>
+
+                <hr/>
+
+                <div class="form-group">
+                    <label>Redirect URIs</label>
+                    <div class="items-list">
+                        @foreach (var uri in clientModel.RedirectUris)
+                        {
+                            <div class="list-item">
+                                <span>@uri</span>
+                                <button type="button" class="remove-item-btn"
+                                    @onclick="() => clientModel.RedirectUris.Remove(uri)">&times;
+                                </button>
+                            </div>
+                        }
+                    </div>
+                    <div class="add-item-form">
+                        <input @bind="newRedirectUri" placeholder="https://myapp.com/callback" class="form-input" />
+                        <button type="button" class="btn btn-secondary" @onclick="AddRedirectUri">Add URI</button>
+                    </div>
+                    @if(!string.IsNullOrEmpty(uriErrorMessage))
+                    {
+                        <div class="validation-message">@uriErrorMessage</div>
+                    }
+                </div>
+                <div class="form-group">
+                    <label>Allowed Grant Types<span class="required-asterisk">*</span></label>
+                    <div class="multi-select-wrapper">
+                        <div class="multi-select-container"
+                            @onclick="() => isGrantTypeDropdownOpen = !isGrantTypeDropdownOpen">
+
+                            @if (!clientModel.AllowedGrantTypes.Any())
+                            {
+                                <span class="multi-select-placeholder">Select a grant type to add...</span>
+                            }
+                            @foreach (var grant in clientModel.AllowedGrantTypes)
+                            {
+                                <div class="selected-item">
+                                    <span>@grant</span>
+                                    <button type="button" class="remove-item-btn"
+                                            @onclick="() => clientModel.AllowedGrantTypes.Remove(grant)"
+                                            @onclick:stopPropagation>&times;
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                        @if (isGrantTypeDropdownOpen)
+                        {
+                            <ul class="multi-select-dropdown">
+                                @foreach (var grantType in availableGrantTypes) { <li @onclick="() => SelectGrantType(grantType)">@grantType</li> }
+                            </ul>
+                        }
+                    </div>
+                    <ValidationMessage For="@(() => clientModel.AllowedGrantTypes)" />
+                </div>
+                <div class="form-group">
+                    <label>Allowed Scopes</label>
+                    <div class="multi-select-wrapper">
+                        <div class="multi-select-container" @onclick="() => isScopeDropdownOpen = !isScopeDropdownOpen">
+
+                            @if (!clientModel.AllowedScopes.Any())
+                            {
+                                <span class="multi-select-placeholder">Select or add a scope...</span>
+                            }
+
+                            @foreach (var scope in clientModel.AllowedScopes)
+                            {
+                                <div class="selected-item">
+                                    <span>@scope</span>
+                                    <button type="button" class="remove-item-btn"
+                                            @onclick="() => clientModel.AllowedScopes.Remove(scope)"
+                                            @onclick:stopPropagation>&times;</button>
+                                </div>
+                            }
+                        </div>
+
+                        @if (isScopeDropdownOpen)
+                        {
+                            <ul class="multi-select-dropdown">
+                                @foreach (var scope in availableStandardScopes)
+                                {
+                                    <li @onclick="() => SelectScope(scope)">@scope</li>
+                                }
+
+                                <li class="multi-select-custom-add">
+                                    <div class="add-item-form" @onclick:stopPropagation>
+                                        <input @bind="newCustomScope"
+                                               placeholder="Enter custom scope..."
+                                               class="form-input" />
+                                        <button type="button" class="btn btn-secondary" @onclick="AddCustomScope">Add</button>
+                                    </div>
+                                </li>
+                            </ul>
+                        }
+                    </div>
+                </div>
+                <hr/>
+
+                <div class="form-group">
+                    <label>Front-Channel Logout URI</label>
+                    <InputText id="frontChannelLogoutUri" @bind-Value="clientModel.FrontChannelLogoutUri" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label>Back-Channel Logout URI</label>
+                    <InputText id="backChannelLogoutUri" @bind-Value="clientModel.BackChannelLogoutUri" class="form-input" />
+                </div>
+                <div class="form-group-checkbox">
+                    <InputCheckbox id="enableSignup" @bind-Value="clientModel.EnableSignup" />
+                    <label for="enableSignup">Enable new user signup through this client</label>
+                </div>
+
+                <h2 class="form-section-header">Token Settings</h2>
+                <div class="form-group">
+                    <label for="accessTokenLifetime">Access Token Lifetime (seconds)</label>
+                    <InputNumber id="accessTokenLifetime" @bind-Value="clientModel.AccessTokenLifetime" class="form-input" />
+                </div>
+                <div class="form-group">
+                    <label for="refreshTokenExpiration">Refresh Token Expiration (days)</label>
+                    <InputNumber id="refreshTokenExpiration" @bind-Value="clientModel.RefreshTokenExpiration" class="form-input" />
+                </div>
+                <div class="form-group-checkbox">
+                    <InputCheckbox id="alwaysIncludeClaims" @bind-Value="clientModel.AlwaysIncludeUserClaimsInIdToken" />
+                    <label for="alwaysIncludeClaims">Always include user claims in ID Token</label>
+                </div>
+                <div class="form-group-checkbox">
+                    <InputCheckbox id="includeJwtId" @bind-Value="clientModel.IncludeJwtId" />
+                    <label for="includeJwtId">Include JWT ID (jti)</label>
+                </div>
+            </div>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="error-message">@errorMessage</div>
+            }
+            <div class="form-footer">
+                <button type="submit" class="btn btn-primary">@(IsNew ? "Create Client" : "Save Changes")</button>
+                <button type="button" class="btn btn-secondary" @onclick="NavigateBack">Cancel</button>
+            </div>
+        </EditForm>
+    </div>
+}
+@code {
+    #region Parameters & State
+    [Parameter]
+    public int? ClientId { get; set; }
+
+    private ClientViewModel clientModel = new();
+    private bool isLoading = true;
+    private bool IsNew => ClientId == null;
+    private string? errorMessage;
+    private string? uriErrorMessage;
+    private bool CanManageClients => AppState.CurrentUserRoleInSelectedOrg >= OrganizationRole.Admin;
+
+    private string newRedirectUri = string.Empty;
+    private string newSecretValue = string.Empty;
+    private string newSecretDescription = string.Empty;
+
+    // Data for dropdowns
+    private bool isGrantTypeDropdownOpen = false;
+    private List<string> allGrantTypes = new() { GrantType.ClientCredentials, GrantType.AuthorizationCode, GrantType.Hybrid, GrantType.ResourceOwnerPassword };
+    private List<string> availableGrantTypes => allGrantTypes.Except(clientModel.AllowedGrantTypes).ToList();
+
+    private bool isScopeDropdownOpen = false;
+    private string newCustomScope = string.Empty;
+    private List<string> standardScopes = new() { "openid", "profile", "email", "offline_access" };
+    private List<string> availableStandardScopes => standardScopes.Except(clientModel.AllowedScopes).ToList();
+    #endregion
+
+    #region Lifecycle & Data Loading
+    protected override async Task OnInitializedAsync()
+    {
+        if (!CanManageClients || AppState.SelectedOrganization == null)
+        {
+            isLoading = false;
+            return;
+        }
+
+        if (IsNew)
+        {
+            clientModel = new ClientViewModel
+            {
+                ClientIdString = HelperService.GenerateRandomString(24),
+                AllowedGrantTypes = new List<string> { GrantType.ClientCredentials },
+                AllowedScopes = new () { "openid" },
+                ClientSecrets = new() { new SecretViewModel
+                {
+                    Value = HelperService.GenerateRandomString(32),
+                    Description = $"Created on {DateTime.UtcNow:yyyy-MM-dd}",
+                    IsNew = true
+                } },
+                Enabled = true,
+                AccessTokenLifetime = 3600,
+                RefreshTokenExpiration = 30,
+                IncludeJwtId = true,
+                AlwaysIncludeUserClaimsInIdToken = false
+            };
+        }
+        else
+        {
+            await using var configDbContext = await ConfigurationDbContextFactory.CreateDbContextAsync();
+            var client = await configDbContext.Clients
+                .Include(c => c.AllowedGrantTypes)
+                .Include(c => c.AllowedScopes)
+                .Include(c => c.RedirectUris)
+                .Include(c => c.ClientSecrets)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == ClientId);
+
+            await using var appDbContext = await DbContextFactory.CreateDbContextAsync();
+            var ownership = await appDbContext.ClientOwnerships
+                .AsNoTracking()
+                .FirstOrDefaultAsync(co => co.ClientId == ClientId && co.OrganizationId == AppState.SelectedOrganization.Id);
+
+            if (client != null && ownership != null)
+            {
+                clientModel = new ClientViewModel
+                {
+                    Id = client.Id,
+                    ClientIdString = client.ClientId,
+                    ClientName = client.ClientName,
+                    ClientUri = client.ClientUri,
+                    LogoUri = client.LogoUri,
+                    Enabled = client.Enabled,
+                    AllowedGrantTypes = client.AllowedGrantTypes.Select(g => g.GrantType).ToList(),
+                    AllowedScopes = client.AllowedScopes.Select(s => s.Scope).ToList(),
+                    ClientSecrets = client.ClientSecrets
+                                          .Select(s => new SecretViewModel
+                                          {
+                                            Value = s.Value,
+                                            Description = s.Description,
+                                            IsNew = false
+                                          })
+                                          .ToList(),
+                    RedirectUris = client.RedirectUris.Select(u => u.RedirectUri).ToList(),
+                    FrontChannelLogoutUri = client.FrontChannelLogoutUri,
+                    BackChannelLogoutUri = client.BackChannelLogoutUri,
+                    AccessTokenLifetime = client.AccessTokenLifetime,
+                    RefreshTokenExpiration = (int)TimeSpan.FromSeconds(client.AbsoluteRefreshTokenLifetime).TotalDays,
+                    AlwaysIncludeUserClaimsInIdToken = client.AlwaysIncludeUserClaimsInIdToken,
+                    IncludeJwtId = client.IncludeJwtId,
+                    EnableSignup = ownership.EnableSignup
+                };
+            }
+            else { errorMessage = "Client not found."; }
+        }
+        isLoading = false;
+    }
+    #endregion
+
+    #region Event Handlers & Navigation
+    private async Task HandleSave()
+    {
+        if (AppState.SelectedOrganization == null) { errorMessage = "An organization must be selected."; return; }
+        errorMessage = null;
+
+        try
+        {
+            await using var configDbContext = await ConfigurationDbContextFactory.CreateDbContextAsync();
+            var clientIdExists = await configDbContext.Clients.AnyAsync(c => c.ClientId == clientModel.ClientIdString &&
+                                                                             c.Id != clientModel.Id);
+
+            if (clientIdExists)
+            {
+                errorMessage = $"Error: The Client ID '{clientModel.ClientIdString}' is already in use.";
+                return;
+            }
+
+            if (IsNew)
+            {
+                var newClient = new ClientEntity
+                {
+                    ClientId = clientModel.ClientIdString,
+                    ClientName = clientModel.ClientName,
+                    ClientUri = clientModel.ClientUri,
+                    LogoUri = clientModel.LogoUri,
+                    Enabled = clientModel.Enabled,
+                    ProtocolType = "oidc",
+                    RequireClientSecret = true,
+                    RequirePkce = true,
+                    AllowedGrantTypes = clientModel.AllowedGrantTypes
+                                                   .Select(gt => new ClientGrantType { GrantType = gt })
+                                                   .ToList(),
+                    AllowedScopes = clientModel.AllowedScopes
+                                                .Select(s => new ClientScope { Scope = s })
+                                                .ToList(),
+                    ClientSecrets = clientModel.ClientSecrets
+                                               .Select(s => new ClientSecret
+                                                {
+                                                    Value = s.Value.Sha256(), //hash
+                                                    Description = s.Description
+                                                })
+                                                .ToList(),
+                    RedirectUris = clientModel.RedirectUris
+                                              .Select(uri => new ClientRedirectUri { RedirectUri = uri })
+                                              .ToList(),
+                    FrontChannelLogoutUri = clientModel.FrontChannelLogoutUri,
+                    BackChannelLogoutUri = clientModel.BackChannelLogoutUri,
+                    AccessTokenLifetime = clientModel.AccessTokenLifetime,
+                    AbsoluteRefreshTokenLifetime = (int)TimeSpan.FromDays(clientModel.RefreshTokenExpiration).TotalSeconds,
+                    AlwaysIncludeUserClaimsInIdToken = clientModel.AlwaysIncludeUserClaimsInIdToken,
+                    IncludeJwtId = clientModel.IncludeJwtId
+                };
+                configDbContext.Clients.Add(newClient);
+                await configDbContext.SaveChangesAsync();
+
+                await using var appDbContext = await DbContextFactory.CreateDbContextAsync();
+                appDbContext.ClientOwnerships.Add(
+                    new ClientOwnership
+                    {
+                        OrganizationId = AppState.SelectedOrganization.Id,
+                        ClientId = newClient.Id,
+                        EnableSignup = clientModel.EnableSignup
+                    }
+                );
+                await appDbContext.SaveChangesAsync();
+
+                NavigateBack();
+            }
+            else
+            {
+                var clientToUpdate = await configDbContext.Clients
+                    .Include(c => c.AllowedGrantTypes)
+                    .Include(c => c.AllowedScopes)
+                    .Include(c => c.RedirectUris)
+                    .Include(c => c.ClientSecrets)
+                    .FirstOrDefaultAsync(c => c.Id == clientModel.Id);
+
+                await using var appDbContext = await DbContextFactory.CreateDbContextAsync();
+                var ownershipToUpdate = await appDbContext.ClientOwnerships
+                    .FirstOrDefaultAsync(co => co.ClientId == clientModel.Id);
+
+                if (clientToUpdate != null && ownershipToUpdate != null)
+                {
+                    clientToUpdate.ClientId = clientModel.ClientIdString;
+                    clientToUpdate.ClientName = clientModel.ClientName;
+                    clientToUpdate.ClientUri = clientModel.ClientUri;
+                    clientToUpdate.LogoUri = clientModel.LogoUri;
+                    clientToUpdate.Enabled = clientModel.Enabled;
+
+                    // Synchronize collections
+                    clientToUpdate.AllowedGrantTypes.SyncCollection(
+                        clientModel.AllowedGrantTypes,
+                        entity => entity.GrantType,
+                        viewModel => viewModel,
+                        viewModel => new ClientGrantType { GrantType = viewModel }
+                    );
+                    clientToUpdate.AllowedScopes.SyncCollection(
+                        clientModel.AllowedScopes,
+                        entity => entity.Scope,
+                        viewModel => viewModel,
+                        viewModel => new ClientScope { Scope = viewModel }
+                    );
+                    clientToUpdate.RedirectUris.SyncCollection(
+                        clientModel.RedirectUris,
+                        entity => entity.RedirectUri,
+                        viewModel => viewModel,
+                        viewModel => new ClientRedirectUri { RedirectUri = viewModel }
+                    );
+                    clientToUpdate.ClientSecrets.SyncCollection(
+                        clientModel.ClientSecrets,
+                        entity => entity.Value,
+                        viewModel => viewModel.IsNew ? viewModel.Value.Sha256() : viewModel.Value,
+                        viewModel => new ClientSecret
+                        {
+                            Value = viewModel.Value.Sha256(),
+                            Description = viewModel.Description,
+                            Type = Duende.IdentityServer.IdentityServerConstants.SecretTypes.SharedSecret
+                        }
+                    );
+
+                    clientToUpdate.FrontChannelLogoutUri = clientModel.FrontChannelLogoutUri;
+                    clientToUpdate.BackChannelLogoutUri = clientModel.BackChannelLogoutUri;
+                    clientToUpdate.AccessTokenLifetime = clientModel.AccessTokenLifetime;
+                    clientToUpdate.AbsoluteRefreshTokenLifetime =
+                        (int)TimeSpan.FromDays(clientModel.RefreshTokenExpiration).TotalSeconds;
+                    clientToUpdate.AlwaysIncludeUserClaimsInIdToken = clientModel.AlwaysIncludeUserClaimsInIdToken;
+                    clientToUpdate.IncludeJwtId = clientModel.IncludeJwtId;
+                    ownershipToUpdate.EnableSignup = clientModel.EnableSignup;
+
+                    await configDbContext.SaveChangesAsync();
+                    await appDbContext.SaveChangesAsync();
+                    NavigateBack();
+                }
+                else { errorMessage = "Could not find the client to update."; }
+            }
+        }
+        catch (Exception ex) { errorMessage = "An error occurred while saving the client."; Logger.LogError(ex, "Error saving client."); }
+    }
+    private void SelectGrantType(string grantType)
+    {
+        if (!clientModel.AllowedGrantTypes.Contains(grantType))
+        {
+            clientModel.AllowedGrantTypes.Add(grantType);
+        }
+        isGrantTypeDropdownOpen = false;
+    }
+    private void AddSecret()
+    {
+        if (string.IsNullOrWhiteSpace(newSecretValue)) return;
+
+        var description = !string.IsNullOrWhiteSpace(newSecretDescription)
+            ? newSecretDescription
+            : $"Created on {DateTime.UtcNow:yyyy-MM-dd}";
+
+        clientModel.ClientSecrets.Add(new SecretViewModel
+        {
+            Value = newSecretValue,
+            Description = description,
+            IsNew = true
+        });
+
+        newSecretValue = string.Empty;
+        newSecretDescription = string.Empty;
+    }
+    private void AddRedirectUri()
+    {
+        uriErrorMessage = null; // Clear previous error
+        if (Uri.IsWellFormedUriString(newRedirectUri, UriKind.Absolute))
+        {
+            if (!clientModel.RedirectUris.Contains(newRedirectUri))
+            {
+                clientModel.RedirectUris.Add(newRedirectUri);
+            }
+            newRedirectUri = string.Empty;
+        }
+        else
+        {
+            uriErrorMessage = "Please enter a valid, absolute URI (e.g., https://...).";
+        }
+    }
+    private void SelectScope(string scope)
+    {
+        if (!string.IsNullOrEmpty(scope) && !clientModel.AllowedScopes.Contains(scope))
+        {
+            clientModel.AllowedScopes.Add(scope);
+        }
+        isScopeDropdownOpen = false;
+    }
+    private void AddCustomScope()
+    {
+        if (!string.IsNullOrWhiteSpace(newCustomScope) && !clientModel.AllowedScopes.Contains(newCustomScope))
+        {
+            clientModel.AllowedScopes.Add(newCustomScope);
+            newCustomScope = string.Empty;
+        }
+        isScopeDropdownOpen = false;
+    }
+    private void NavigateBack() => NavigationManager.NavigateTo("/clients");
+    #endregion
+
+    #region View Models
+    public class ClientViewModel
+    {
+        public int Id { get; set; }
+        [Required] public string ClientIdString { get; set; } = string.Empty;
+        [Required] public string ClientName { get; set; } = string.Empty;
+        public string? ClientUri { get; set; }
+        public string? LogoUri { get; set; }
+        public bool Enabled { get; set; }
+        [Required(ErrorMessage = "At least one grant type is required.")]
+        [MinLength(1, ErrorMessage = "At least one grant type is required.")]
+        public List<string> AllowedGrantTypes { get; set; } = new();
+        public List<string> AllowedScopes { get; set; } = new();
+        public List<SecretViewModel> ClientSecrets { get; set; } = new();
+        public List<string> RedirectUris { get; set; } = new();
+        public string? FrontChannelLogoutUri { get; set; }
+        public string? BackChannelLogoutUri { get; set; }
+        public int AccessTokenLifetime { get; set; }
+        public int RefreshTokenExpiration { get; set; }
+        public bool AlwaysIncludeUserClaimsInIdToken { get; set; }
+        public bool IncludeJwtId { get; set; }
+        public bool EnableSignup { get; set; }
+    }
+
+    public class SecretViewModel
+    {
+        public string Value { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public bool IsNew { get; set; }
+    }
+    #endregion
+}

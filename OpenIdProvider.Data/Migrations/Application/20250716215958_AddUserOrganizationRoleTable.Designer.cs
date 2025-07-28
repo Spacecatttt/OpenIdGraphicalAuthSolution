@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OpenIdProvider.Data;
@@ -11,9 +12,11 @@ using OpenIdProvider.Data;
 namespace OpenIdProvider.Data.Migrations.Application
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250716215958_AddUserOrganizationRoleTable")]
+    partial class AddUserOrganizationRoleTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -179,24 +182,12 @@ namespace OpenIdProvider.Data.Migrations.Application
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
-                    b.Property<string>("Address")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
                     b.Property<string>("AvatarUrl")
                         .HasColumnType("text");
-
-                    b.Property<string>("Bio")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("text");
-
-                    b.Property<string>("Country")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
@@ -217,10 +208,6 @@ namespace OpenIdProvider.Data.Migrations.Application
 
                     b.Property<string>("GraphicalPasswordHash")
                         .HasColumnType("text");
-
-                    b.Property<string>("Location")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
@@ -270,22 +257,6 @@ namespace OpenIdProvider.Data.Migrations.Application
                     b.HasIndex("PrimaryOrganizationId");
 
                     b.ToTable("AspNetUsers", (string)null);
-                });
-
-            modelBuilder.Entity("OpenIdProvider.Data.Models.ClientOwnership", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("ClientId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("EnableSignup")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("OrganizationId", "ClientId");
-
-                    b.ToTable("ClientOwnerships");
                 });
 
             modelBuilder.Entity("OpenIdProvider.Data.Models.Group", b =>
@@ -375,32 +346,6 @@ namespace OpenIdProvider.Data.Migrations.Application
                     b.ToTable("Organizations");
                 });
 
-            modelBuilder.Entity("OpenIdProvider.Data.Models.OrganizationClientPermission", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("ClientId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("OrganizationId", "ClientId");
-
-                    b.ToTable("OrganizationClientPermissions");
-                });
-
-            modelBuilder.Entity("OpenIdProvider.Data.Models.UserClientPermission", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("ClientId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("UserId", "ClientId");
-
-                    b.ToTable("UserClientPermissions");
-                });
-
             modelBuilder.Entity("OpenIdProvider.Data.Models.UserOrganizationRole", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -412,9 +357,10 @@ namespace OpenIdProvider.Data.Migrations.Application
                     b.Property<DateTime>("AddedDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("Role")
+                    b.Property<string>("Role")
+                        .IsRequired()
                         .HasMaxLength(50)
-                        .HasColumnType("integer");
+                        .HasColumnType("character varying(50)");
 
                     b.HasKey("UserId", "OrganizationId");
 
@@ -500,17 +446,6 @@ namespace OpenIdProvider.Data.Migrations.Application
                     b.Navigation("PrimaryOrganization");
                 });
 
-            modelBuilder.Entity("OpenIdProvider.Data.Models.ClientOwnership", b =>
-                {
-                    b.HasOne("OpenIdProvider.Data.Models.Organization", "Organization")
-                        .WithMany("OwnedClients")
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Organization");
-                });
-
             modelBuilder.Entity("OpenIdProvider.Data.Models.Group", b =>
                 {
                     b.HasOne("OpenIdProvider.Data.Models.Organization", "Organization")
@@ -531,28 +466,6 @@ namespace OpenIdProvider.Data.Migrations.Application
                         .IsRequired();
 
                     b.Navigation("Group");
-                });
-
-            modelBuilder.Entity("OpenIdProvider.Data.Models.OrganizationClientPermission", b =>
-                {
-                    b.HasOne("OpenIdProvider.Data.Models.Organization", "Organization")
-                        .WithMany("AllowedClientPermissions")
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Organization");
-                });
-
-            modelBuilder.Entity("OpenIdProvider.Data.Models.UserClientPermission", b =>
-                {
-                    b.HasOne("OpenIdProvider.Data.Models.ApplicationUser", "User")
-                        .WithMany("AllowedClientPermissions")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("OpenIdProvider.Data.Models.UserOrganizationRole", b =>
@@ -576,8 +489,6 @@ namespace OpenIdProvider.Data.Migrations.Application
 
             modelBuilder.Entity("OpenIdProvider.Data.Models.ApplicationUser", b =>
                 {
-                    b.Navigation("AllowedClientPermissions");
-
                     b.Navigation("ManagedOrganizations");
                 });
 
@@ -588,13 +499,9 @@ namespace OpenIdProvider.Data.Migrations.Application
 
             modelBuilder.Entity("OpenIdProvider.Data.Models.Organization", b =>
                 {
-                    b.Navigation("AllowedClientPermissions");
-
                     b.Navigation("Groups");
 
                     b.Navigation("ManagedByUsers");
-
-                    b.Navigation("OwnedClients");
 
                     b.Navigation("PrimaryUsers");
                 });

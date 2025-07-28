@@ -60,7 +60,12 @@ nunit-*.xml
 **/bin/
 **/obj/
 lib/*
+dp_keys/
+
+# Files for https:
+# certificate.p12
+# rootCA.pem
+keys/
 
 # ignore test project, can be added later
 MvcClient/
-OpenIdProvider.Blazor/

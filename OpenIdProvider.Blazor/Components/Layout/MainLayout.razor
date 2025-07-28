@@ -1,0 +1,41 @@
+﻿@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+
+<div class="page">
+    <header>
+        <nav class="top-navbar">
+            <div class="nav-left">
+                <div class="nav-separator"></div>
+                <div class="nav-item">
+                    <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
+                </div>
+                <div class="nav-separator"></div>
+                <div class="nav-item">
+                    <NavLink href="@($"/organizations")">Organizations</NavLink>
+                </div>
+                <div class="nav-separator"></div>
+                <div class="nav-item">
+                    <NavLink href="@($"/groups")">Groups</NavLink>
+                </div>
+                <div class="nav-separator"></div>
+                <div class="nav-item">
+                    <NavLink href="@($"/users")">Users</NavLink>
+                </div>
+                <div class="nav-separator"></div>
+                <div class="nav-item">
+                    <NavLink href="@($"/clients")">Clients</NavLink>
+                </div>
+                <div class="nav-separator"></div>
+            </div>
+            <div class="nav-right">
+                <UserNav />
+            </div>
+        </nav>
+    </header>
+
+    <div class="container-fluid">
+        <main role="main" class="pb-3">
+            @Body
+        </main>
+    </div>
+</div>
