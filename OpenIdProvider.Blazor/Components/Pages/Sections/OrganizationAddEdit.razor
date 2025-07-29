@@ -1,6 +1,6 @@
 @page "/organizations/add"
 @page "/organizations/edit/{Id:guid}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "IsManager")]
 @rendermode InteractiveServer
 
 @using Microsoft.EntityFrameworkCore

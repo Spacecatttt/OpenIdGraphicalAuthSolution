@@ -1,5 +1,5 @@
 @page "/clients"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "IsManager")]
 @implements IDisposable
 @rendermode InteractiveServer
 

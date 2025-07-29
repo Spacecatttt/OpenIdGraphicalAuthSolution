@@ -64,7 +64,7 @@ img {
     transition: box-shadow 0.2s, border-color 0.2s;
 }
 
-.form-floating > label {
+.form-floating>label {
     color: var(--text-secondary);
 }
 
@@ -112,7 +112,7 @@ img {
     font-family: inherit;
 
     display: inline;
-    color: #2f2f2f;
+    color: var(--accent-purple);
     margin-right: 10px;
     font-size: 16px;
     text-decoration: underline;
@@ -126,6 +126,48 @@ img {
     color: red;
     font-weight: 300;
     font-size: 14px;
+}
+
+
+.alert {
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.alert-info {
+    color: #0c5460;
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+    font-size: 1rem;
+}
+
+
+.d-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-back {
+    background-color: var(--accent-active);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-back:hover {
+    filter: brightness(0.95);
+}
+
+/* Specific override for images in dark theme */
+:root.dark-theme img {
+    filter: invert(1);
 }
 
 @media (max-width: 700px) {

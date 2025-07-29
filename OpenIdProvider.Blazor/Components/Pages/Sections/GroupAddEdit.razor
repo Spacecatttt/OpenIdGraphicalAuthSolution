@@ -1,6 +1,6 @@
 @page "/groups/add"
 @page "/groups/edit/{GroupId:guid}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "IsManager")]
 @rendermode InteractiveServer
 
 @using Microsoft.EntityFrameworkCore

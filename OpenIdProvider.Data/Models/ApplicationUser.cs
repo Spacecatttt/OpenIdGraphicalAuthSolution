@@ -26,10 +26,10 @@ public class ApplicationUser : IdentityUser<Guid>
     [MaxLength(1024)]
     public string? Bio { get; set; }
 
-    public Guid PrimaryOrganizationId { get; set; }
+    public Guid? PrimaryOrganizationId { get; set; }
 
     [ForeignKey("PrimaryOrganizationId")]
-    public virtual Organization PrimaryOrganization { get; set; } = null!;
+    public virtual Organization? PrimaryOrganization { get; set; }
     public virtual ICollection<Group> Groups { get; set; } = new List<Group>();
     public virtual ICollection<UserClientPermission> AllowedClientPermissions { get; set; } = new List<UserClientPermission>();
 

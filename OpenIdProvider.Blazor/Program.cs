@@ -39,7 +39,12 @@ var migrationsAssembly = typeof(ApplicationDbContext).Assembly.GetName().Name;
 // --- Authentication & Authorization Configuration ---
 
 // Add authentication and authorization for application
-builder.Services.AddAuthorization();
+builder.Services.AddScoped<IAuthorizationHandler, ManagerUserHandler>();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("IsManager", policy =>
+        policy.Requirements.Add(new ManagerUserRequirement()));
+});
 
 // ASP.NET Core Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
@@ -184,7 +189,6 @@ app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.MapAccountEndpoints();
 
 // Initialize IdentityServer
-// SeedData.EnsureSeedData(app);
-// AddData.EnsureSeedData(app);
+//new SeedData().EnsureSeedData(app);
 
 app.Run();

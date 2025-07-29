@@ -1,5 +1,5 @@
 @page "/organizations"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "IsManager")]
 @rendermode InteractiveServer
 
 @using Microsoft.EntityFrameworkCore
@@ -98,7 +98,8 @@ else
                                     <button @onclick='() => GoToEditPage(org.Id)' class="action-btn btn-edit"
                                         disabled="@(GetUserRoleForOrg(org.Id) < OrganizationRole.Admin)">Edit</button>
                                     <button @onclick='() => DeleteOrganization(org.Id, org.Name)' class="action-btn btn-delete"
-                                        disabled="@(GetUserRoleForOrg(org.Id) < OrganizationRole.Owner)">Delete</button>
+                                        disabled="@(GetUserRoleForOrg(org.Id) < OrganizationRole.Owner ||
+                                                    org.Id == AppState.CurrentUser?.PrimaryOrganizationId)">Delete</button>
                                 </div>
                             </td>
                         </tr>
