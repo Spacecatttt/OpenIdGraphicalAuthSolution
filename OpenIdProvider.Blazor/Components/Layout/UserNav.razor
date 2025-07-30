@@ -14,7 +14,7 @@
 @inject IJSRuntime JSRuntime
 @inject AppState AppState
 
-@implements IDisposable
+@implements IAsyncDisposable
 
 @if (AppState.CurrentUser != null)
 {
@@ -32,7 +32,7 @@
         @(AppState.IsLightTheme ? "☀️" : "🌙")
     </a>
 
-    <div class="profile-container">
+    <div class="profile-container" id="profile-dropdown-container">
         <div class="profile" id="profile-trigger" @onclick="ToggleProfileDropdown">
             <img
                 src="@(AppState.CurrentUser.AvatarUrl ?? $"https://placehold.co/32x32/8A42D8/FFFFFF?text={AppState.CurrentUser.DisplayName?.Substring(0, 1).ToUpper()}")" />
@@ -40,7 +40,7 @@
         </div>
 
         <div class="profile-dropdown @(isProfileDropdownVisible ? "show" : "")" id="profile-dropdown-menu">
-            <a href="/account/manage">Settings</a>
+            <a href="/account/manage" @onclick="CloseProfileDropdown">Settings</a>
             <form action="/account/logout" method="post">
                 <AntiforgeryToken />
                 <button type="submit" class="dropdown-item-button">
@@ -59,6 +59,7 @@ else
 
     private bool isProfileDropdownVisible = false;
     private DotNetObjectReference<UserNav>? objRef;
+    private IJSObjectReference? module;
 
     protected override async Task OnInitializedAsync()
     {
@@ -71,8 +72,22 @@ else
         {
             objRef = DotNetObjectReference.Create(this);
             await JSRuntime.InvokeVoidAsync("themeInterop.setDotNetHelper", objRef);
+
+            module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/dropdown.js");
+            await module.InvokeVoidAsync("initializeDropdown", objRef, "profile-dropdown-container");
         }
     }
+
+    [JSInvokable("CloseDropdown")]
+    public void CloseProfileDropdown()
+    {
+        if (isProfileDropdownVisible)
+        {
+            isProfileDropdownVisible = false;
+            StateHasChanged();
+        }
+    }
+
     [JSInvokable]
     public void UpdateThemeState(bool isLight)
     {
@@ -100,9 +115,15 @@ else
     {
         await JSRuntime.InvokeVoidAsync("themeInterop.toggle");
     }
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         AppState.OnChange -= StateHasChanged;
+        if (module is not null)
+        {
+            // Clean up the JavaScript event listener
+            await module.InvokeVoidAsync("cleanupDropdown", "profile-dropdown-container");
+            await module.DisposeAsync();
+        }
         objRef?.Dispose();
     }
 }
