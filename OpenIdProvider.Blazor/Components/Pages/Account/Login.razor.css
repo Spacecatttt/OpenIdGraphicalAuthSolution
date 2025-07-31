@@ -108,6 +108,11 @@ img {
     font-size: 14px;
 }
 
+/* Specific override for password button icon in dark theme */
+:root.dark-theme img {
+    filter: invert(1);
+}
+
 @media (max-width: 768px) {
     .container-1 {
         flex-direction: column;

@@ -20,7 +20,7 @@
     <div class="container-2">
         @if (currentStep == Step.UserDetails)
         {
-            <EditForm EditContext="editContext" OnValidSubmit="() => {}">
+            <EditForm EditContext="editContext" OnValidSubmit="() => { }">
                 <h3>Sign up</h3>
                 @if (!string.IsNullOrEmpty(generalErrorMessage))
                 {
@@ -70,6 +70,23 @@
                 </button>
             </EditForm>
         }
+        else if (currentStep == Step.ConfirmUpgrade)
+        {
+            <h3>Activate Your Account</h3>
+            <div class="alert alert-info">
+                An account with the email <strong>@Input.User.Email</strong> already exists as an invited user.
+                Do you want to activate it by creating your own primary organization?
+            </div>
+
+            <div class="d-flex">
+                <button type="button" class="btn-back" @onclick="GoToUserStep">
+                    Go Back
+                </button>
+                <button type="button" class="btn-success w-auto" @onclick="() => currentStep = Step.OrgDetails">
+                    Yes, Create Organization
+                </button>
+            </div>
+        }
         else if (currentStep == Step.OrgDetails)
         {
             <form method="post" action="/account/register">
@@ -94,9 +111,9 @@
                 </div>
                 <div class="form-floating mb-2">
                     <textarea name="Organization.Description"
-                    @onchange="(e) => Input.Organization.Description = e.Value?.ToString() ?? string.Empty"
-                    class="form-control" placeholder="Enter description..."
-                    style="height: 6rem;">@Input.Organization.Description</textarea>
+                        @onchange="(e) => Input.Organization.Description = e.Value?.ToString() ?? string.Empty"
+                        class="form-control" placeholder="Enter description..."
+                        style="height: 6rem;">@Input.Organization.Description</textarea>
                     <label class="form-label">Description</label>
                 </div>
                 <div class="form-floating mb-2">
@@ -110,7 +127,7 @@
                 </button>
             </form>
 
-            <div class="container-inline mt-3">
+            <div class="container-inline">
                 <p>Want to go back?</p>
                 <button type="button" class="link-style-button" @onclick="GoToUserStep">
                     Back to user details
@@ -136,7 +153,7 @@
     [SupplyParameterFromQuery]
     public string? PostSubmitError { get; set; }
 
-    private enum Step { UserDetails, OrgDetails }
+    private enum Step { UserDetails, ConfirmUpgrade, OrgDetails }
     private Step currentStep = Step.UserDetails;
     private bool isProcessing = false;
     private bool slugManuallyEdited = false;
@@ -182,8 +199,8 @@
 
         var validationContext = new ValidationContext(Input.User);
         var validationResults = new List<ValidationResult>();
-        bool isUserStepValid = Validator.TryValidateObject(Input.User, validationContext, validationResults,
-        validateAllProperties: true);
+        bool isUserStepValid = Validator.TryValidateObject(Input.User, validationContext,
+        validationResults, validateAllProperties: true);
 
         if (!isUserStepValid)
         {
@@ -204,6 +221,18 @@
         if (response.IsSuccessStatusCode)
         {
             currentStep = Step.OrgDetails;
+            var validationResult = await response.Content.ReadFromJsonAsync<UserValidationResponse>();
+            if (validationResult is { CanProceed: true })
+            {
+                if (validationResult.IsExistingEndUser)
+                {
+                    currentStep = Step.ConfirmUpgrade;
+                }
+                else
+                {
+                    currentStep = Step.OrgDetails;
+                }
+            }
         }
         else
         {

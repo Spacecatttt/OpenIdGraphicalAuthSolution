@@ -1,5 +1,5 @@
 @page "/account/manage"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "IsManager")]
 @layout MainLayout
 @rendermode InteractiveServer
 
@@ -106,10 +106,10 @@ else
 
                 <div class="form-group">
                     <label for="primaryOrg">Primary Organization</label>
-                    <InputSelect @bind-Value="profileModel.PrimaryOrganizationId" class="form-input" TValue="Guid">
+                    <InputSelect @bind-Value="SelectedPrimaryOrgIdAsString" class="form-input">
                         @foreach (var org in ownedOrganizations)
                         {
-                            <option value="@org.Id">@org.Name</option>
+                            <option value="@org.Id.ToString()">@org.Name</option>
                         }
                     </InputSelect>
                     <small class="text-muted mt-1">This is your default organization when you log in.</small>
@@ -169,8 +169,8 @@ else
                             <button type="button" class="password-btn" @onclick="ToggleCurrentPasswordVisibility"
                                 title="Show/Hide Password">
                                 <img src="@(currentPasswordFieldType == "password" ?
-                                                                                                             "/images/security/eye_show.png" :
-                                                                                                             "/images/security/eye_hide.png")"
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             "/images/security/eye_show.png" :
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             "/images/security/eye_hide.png")"
                                     alt="Show/Hide" />
                             </button>
                         </div>
@@ -192,8 +192,8 @@ else
                             <button type="button" class="password-btn" @onclick="TogglePasswordVisibility"
                                 title="Show/Hide Password">
                                 <img src="@(newPasswordFieldType == "password" ?
-                                                                                                         "/images/security/eye_show.png" :
-                                                                                                         "/images/security/eye_hide.png")"
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             "/images/security/eye_show.png" :
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             "/images/security/eye_hide.png")"
                                     alt="Show/Hide" />
                             </button>
                         </div>
@@ -210,8 +210,8 @@ else
                             <button type="button" class="password-btn" @onclick="TogglePasswordVisibility"
                                 title="Show/Hide Password">
                                 <img src="@(newPasswordFieldType == "password" ?
-                                                                                                         "/images/security/eye_show.png" :
-                                                                                                         "/images/security/eye_hide.png")"
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             "/images/security/eye_show.png" :
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             "/images/security/eye_hide.png")"
                                     alt="Show/Hide" />
                             </button>
                         </div>
@@ -246,6 +246,12 @@ else
     private bool isGroupDropdownOpen = false;
     private List<GroupViewModel> allUserGroups = new();
     private List<GroupViewModel> availableGroups => allUserGroups.Except(profileModel.SelectedGroups).ToList();
+
+    private string? SelectedPrimaryOrgIdAsString
+    {
+        get => profileModel.PrimaryOrganizationId?.ToString();
+        set => profileModel.PrimaryOrganizationId = !string.IsNullOrEmpty(value) ? Guid.Parse(value) : null;
+    }
     #endregion
 
     #region Lifecycle & Data Loading
@@ -271,7 +277,8 @@ else
             return;
         }
 
-
+        // Re-fetch the user with a live DbContext and eagerly load navigation properties (like Groups)
+        // to prevent lazy-loading exceptions on the detached user object from AppState.
         await using var dbContext = await DbContextFactory.CreateDbContextAsync();
         var user = await dbContext.Users
         .Include(u => u.Groups)
@@ -300,12 +307,8 @@ else
         };
 
         ownedOrganizations = AppState.UserOrganizations
-        .Where(org => org.Id == user.PrimaryOrganizationId ||
-        user.ManagedOrganizations.Any(
-        mo => mo.OrganizationId == org.Id &&
-        mo.Role == OrganizationRole.Owner
-        )
-        )
+        .Where(org => (user.PrimaryOrganizationId.HasValue && org.Id == user.PrimaryOrganizationId.Value) ||
+        user.ManagedOrganizations.Any(mo => mo.OrganizationId == org.Id && mo.Role == OrganizationRole.Owner))
         .DistinctBy(o => o.Id)
         .ToList();
 
@@ -335,12 +338,9 @@ else
         profileStatusMessage = null;
         isProfileError = false;
 
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var userId = UserManager.GetUserId(authState.User);
-
-        if (string.IsNullOrEmpty(userId))
+        if (profileModel.PrimaryOrganizationId == null)
         {
-            profileStatusMessage = "Error: User not found.";
+            profileStatusMessage = "A primary organization must be selected.";
             isProfileError = true;
             return;
         }
@@ -351,7 +351,7 @@ else
 
             var userToUpdate = await dbContext.Users
             .Include(u => u.Groups)
-            .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+            .FirstOrDefaultAsync(u => u.Id == AppState.CurrentUser!.Id);
 
             if (userToUpdate == null)
             {
@@ -380,13 +380,15 @@ else
             if (userToUpdate.PrimaryOrganizationId != profileModel.PrimaryOrganizationId)
             {
                 var oldPrimaryOrgId = userToUpdate.PrimaryOrganizationId;
-                userToUpdate.PrimaryOrganizationId = profileModel.PrimaryOrganizationId;
+                var newPrimaryOrgId = profileModel.PrimaryOrganizationId;
+                userToUpdate.PrimaryOrganizationId = newPrimaryOrgId;
 
-                if (oldPrimaryOrgId != Guid.Empty)
+                // If there was an old primary org, ensure the user retains ownership via an explicit role.
+                if (oldPrimaryOrgId.HasValue)
                 {
                     var existingRoleForOldOrg = await dbContext.UserOrganizationRoles
                     .FirstOrDefaultAsync(r => r.UserId == userToUpdate.Id &&
-                    r.OrganizationId == oldPrimaryOrgId);
+                    r.OrganizationId == oldPrimaryOrgId.Value);
 
                     if (existingRoleForOldOrg == null)
                     {
@@ -394,20 +396,25 @@ else
                         new UserOrganizationRole
                         {
                             UserId = userToUpdate.Id,
-                            OrganizationId = oldPrimaryOrgId,
+                            OrganizationId = oldPrimaryOrgId.Value,
                             Role = OrganizationRole.Owner
                         }
                         );
                     }
                 }
 
-                var existingRoleForNewOrg = await dbContext.UserOrganizationRoles
-                .FirstOrDefaultAsync(r => r.UserId == userToUpdate.Id &&
-                r.OrganizationId == profileModel.PrimaryOrganizationId);
-
-                if (existingRoleForNewOrg != null)
+                // If the new primary org has an explicit role, remove it,
+                // as the primary link is now the source of truth for ownership.
+                if (newPrimaryOrgId.HasValue)
                 {
-                    dbContext.UserOrganizationRoles.Remove(existingRoleForNewOrg);
+                    var existingRoleForNewOrg = await dbContext.UserOrganizationRoles
+                    .FirstOrDefaultAsync(r => r.UserId == userToUpdate.Id &&
+                    r.OrganizationId == newPrimaryOrgId.Value);
+
+                    if (existingRoleForNewOrg != null)
+                    {
+                        dbContext.UserOrganizationRoles.Remove(existingRoleForNewOrg);
+                    }
                 }
             }
 
@@ -500,7 +507,8 @@ else
         public string? Location { get; set; }
         public string? Address { get; set; }
         public List<GroupViewModel> SelectedGroups { get; set; } = new();
-        public Guid PrimaryOrganizationId { get; set; }
+        [Required(ErrorMessage = "A primary organization must be selected.")]
+        public Guid? PrimaryOrganizationId { get; set; }
     }
 
     public class GroupViewModel

@@ -8,7 +8,7 @@
     border-radius: 0.75rem;
     padding: 1.5rem;
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
-    max-width: 800px;
+    max-width: 900px;
     margin: 2rem auto;
 }
 
@@ -51,6 +51,7 @@
 .form-group {
     display: flex;
     flex-direction: column;
+    margin-top: 1rem;
 }
 
 .form-group label {
@@ -71,27 +72,65 @@
     transition: box-shadow 0.2s, border-color 0.2s;
 }
 
-.form-input:focus,
-.form-textarea:focus {
-    outline: none;
-    border-color: var(--accent-purple);
-    box-shadow: 0 0 0 2px var(--accent-purple);
+.required-asterisk {
+    color: #ef4444;
+    margin-left: 0.25rem;
 }
 
-.form-group-checkbox {
+.collapsible-section-header,
+.form-section-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-top: 2rem;
+    margin-bottom: 1rem;
 }
 
-.form-group-checkbox label {
-    margin-bottom: 0;
+.collapsible-section-header h2 {
+    margin: 0;
+    padding: 0;
+    border: none;
+    font-size: inherit;
+    font-weight: inherit;
 }
 
+.btn-toggle {
+    background: none;
+    border: 1px solid var(--accent-purple);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-toggle:hover {
+    background-color: var(--accent-active);
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+/* --- Adjustments to existing styles --- */
+
+/* Add a bit more space above the "Add User" label */
+.form-group label {
+    margin-top: 0.5rem;
+}
+
+/* Remove margin-top from the first label in a group */
+.form-group:first-child label {
+    margin-top: 0;
+}
 
 /* Buttons  */
 
-/* Base button style */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -111,7 +150,6 @@
     height: 1rem;
 }
 
-/* Primary button style */
 .btn-primary {
     background-color: #1d5add;
     color: white;
@@ -121,7 +159,6 @@
     background-color: #1844bd;
 }
 
-/* Secondary button style */
 .btn-secondary {
     background-color: var(--accent-active);
     color: var(--text-primary);
@@ -132,8 +169,175 @@
     filter: brightness(0.95);
 }
 
+.btn-danger {
+    background-color: #dc3545;
+    color: white;
+}
 
-/* Validation & Feedback  */
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+.btn-sm {
+    padding: 0.4rem;
+    font-size: 0.75rem;
+    border-radius: 0.2rem;
+}
+
+/* --- User & Claim Management Styles --- */
+
+/* Container for displaying selected users as pills */
+.selected-items-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    min-height: 40px;
+    background-color: var(--bg-color);
+}
+
+.selected-item {
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--accent-active);
+    color: var(--text-primary);
+    border-radius: 9999px;
+    /* Pill shape */
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.remove-item-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1.25rem;
+    line-height: 1;
+    margin-left: 0.5rem;
+    padding: 0;
+}
+
+.remove-item-btn:hover {
+    color: var(--text-primary);
+}
+
+/* --- Multi-select with Search Input --- */
+
+.multi-select-wrapper {
+    position: relative;
+}
+
+.multi-select-container.with-search {
+    cursor: default;
+    padding: 0;
+}
+
+.multi-select-container.with-search:hover {
+    border-color: var(--border-color);
+
+}
+
+.multi-select-container ::deep .search-input {
+    border: none;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-color);
+    padding: 0.5rem;
+    color: var(--text-primary);
+        border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+}
+
+.multi-select-container ::deep .search-input:focus {
+    box-shadow: none;
+}
+
+.multi-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--secondary-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-top: 0.25rem;
+    padding: 0.5rem 0;
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.multi-select-dropdown li {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.multi-select-dropdown li:hover {
+    background-color: var(--accent-active);
+}
+
+.multi-select-dropdown li.disabled {
+    color: var(--text-secondary);
+    cursor: not-allowed;
+}
+
+/* --- Claims List Styles --- */
+
+.claims-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem; /* Space between claim items */
+    margin-top: 1rem;
+}
+
+.claim-item-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr 90px;
+    gap: 1rem;
+    padding: 0 0.25rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.claim-item {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 1rem;
+    align-items: center;
+}
+
+.claim-item ::deep .claim-input{
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 0.5rem;
+    padding: 0.5rem ;
+    font-size: 0.875rem;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.empty-list-placeholder {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2rem 1rem;
+    border: 1px dashed var(--border-color);
+    border-radius: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.empty-list-placeholder p {
+    margin: 0;
+}
+
+/* --- Validation & Feedback --- */
 
 .error-message {
     background-color: var(--bg-color);
@@ -146,13 +350,8 @@
     text-align: center;
 }
 
-.validation-message {
+::deep .validation-message {
     color: #ef4444;
     font-size: 0.875rem;
     margin-top: 0.25rem;
-}
-
-.invalid .form-input,
-.invalid .form-textarea {
-    border-color: #ef4444;
 }

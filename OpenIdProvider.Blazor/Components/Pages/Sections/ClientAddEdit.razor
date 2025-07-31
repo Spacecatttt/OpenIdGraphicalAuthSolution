@@ -1,6 +1,6 @@
 @page "/clients/add"
 @page "/clients/edit/{ClientId:int}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "IsManager")]
 @rendermode InteractiveServer
 
 @using System.ComponentModel.DataAnnotations
