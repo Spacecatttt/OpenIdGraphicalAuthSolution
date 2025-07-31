@@ -4,6 +4,7 @@
 @rendermode InteractiveServer
 
 @using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Blazor.Services
 @using OpenIdProvider.Data
 @using OpenIdProvider.Data.Models
 @using System.ComponentModel.DataAnnotations
@@ -21,6 +22,12 @@
         <p class="status-message"><em>Loading...</em></p>
     </div>
 }
+else if (AppState.SelectedOrganization == null)
+{
+    <div class="form-container">
+        <p class="error-message">An organization must be selected to manage clients.</p>
+    </div>
+}
 else
 {
     <div class="form-container">
@@ -32,21 +39,95 @@ else
             </button>
         </div>
 
-        <EditForm Model="groupModel" OnValidSubmit="HandleSave">
+        <EditForm Model="viewModel" OnValidSubmit="HandleSave">
             <DataAnnotationsValidator />
 
             <div class="form-grid">
                 <div class="form-group">
-                    <label for="name">Group Name</label>
-                    <InputText id="name" @bind-Value="groupModel.Name" class="form-input" />
-                    <ValidationMessage For="@(() => groupModel.Name)" />
+                    <label for="name">Group Name<span class="required-asterisk">*</span></label>
+                    <InputText id="name" @bind-Value="viewModel.Name" class="form-input" />
+                    <ValidationMessage For="@(() => viewModel.Name)" class="validation-message" />
                 </div>
 
                 <div class="form-group">
                     <label for="description">Description</label>
-                    <InputTextArea id="description" @bind-Value="groupModel.Description" class="form-textarea" rows="4" />
+                    <InputTextArea id="description" @bind-Value="viewModel.Description" class="form-textarea" rows="4" />
                 </div>
             </div>
+
+            <div class="collapsible-section-header">
+                <h2>Users in Group (@viewModel.SelectedUserIds.Count)</h2>
+                <button type="button" class="btn-toggle" @onclick="() => showUsers = !showUsers">
+                    @(showUsers ? "Hide" : "Show")
+                </button>
+            </div>
+
+            @if (showUsers)
+            {
+                <div class="selected-items-display">
+                    @foreach (var user in GetSelectedUsers())
+                    {
+                        <div class="selected-item">
+                            <span>@user.DisplayName</span>
+                            <button type="button" class="remove-item-btn" @onclick="() => RemoveUser(user.Id)"
+                                @onclick:stopPropagation>&times;</button>
+                        </div>
+                    }
+                </div>
+            }
+            <div class="form-group">
+                <label>Add User</label>
+
+                <div class="multi-select-wrapper">
+                    <div class="multi-select-container with-search"
+                        @onclick="() => isUserDropdownOpen = !isUserDropdownOpen">
+                        <InputText @bind-Value="userSearchText" @bind-Value:after="() => { isUserDropdownOpen = true; }"
+                            placeholder="Search users to add..." class="search-input" />
+                    </div>
+                    @if (isUserDropdownOpen)
+                    {
+                        <ul class="multi-select-dropdown">
+                            @foreach (var user in availableUsers)
+                            {
+                                <li @onclick="() => SelectUser(user.Id)">@user.DisplayName (@user.Email)</li>
+                            }
+                            @if (!availableUsers.Any())
+                            {
+                                <li class="disabled">No matching users found or all added.</li>
+                            }
+                        </ul>
+                    }
+                </div>
+
+            </div>
+
+            <h2 class="form-section-header">Group Claims</h2>
+            <div class="claims-list">
+                @if (viewModel.Claims.Any())
+                {
+                    <div class="claim-item-header">
+                        <label>Type</label>
+                        <label>Value</label>
+                    </div>
+
+                    @foreach (var claim in viewModel.Claims)
+                    {
+                        <div class="claim-item" @key="claim.TempId">
+                            <InputText @bind-Value="claim.Type" class="claim-input" placeholder="e.g., role" />
+                            <InputText @bind-Value="claim.Value" class="claim-input" placeholder="e.g., admin" />
+                            <button type="button" class="btn btn-danger btn-sm" @onclick="() => RemoveClaim(claim)">Remove</button>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="empty-list-placeholder">
+                        <p>No claims have been added yet. Click "Add Claim" to start.</p>
+                    </div>
+                }
+            </div>
+            <button type="button" class="btn btn-secondary mt-2" @onclick="AddClaim">Add Claim</button>
+
 
             @if (!string.IsNullOrEmpty(errorMessage))
             {
@@ -62,39 +143,67 @@ else
 }
 
 @code {
-    [Parameter]
-    public string OrgSlug { get; set; } = string.Empty;
-
+    #region Parameters & State
     [Parameter]
     public Guid? GroupId { get; set; }
 
-    private Group groupModel = new();
+    private GroupViewModel viewModel = new();
     private Guid organizationId;
     private bool isLoading = true;
     private bool IsNew => GroupId == null;
     private string? errorMessage;
+
+    // State for user selection
+    private List<ApplicationUser> allOrgUsers = new();
+    private bool isUserDropdownOpen = false;
+    private string userSearchText = string.Empty;
+    private bool showUsers = false;
+
+    private IEnumerable<ApplicationUser> availableUsers => allOrgUsers.Where(u => IsUserAvailable(u));
+    #endregion
+
+    #region Lifecycle & Data Loading
     protected override async Task OnInitializedAsync()
     {
+
         if (AppState.SelectedOrganization == null)
         {
-            errorMessage = "Parent organization not found.";
             isLoading = false;
             return;
         }
-
         organizationId = AppState.SelectedOrganization.Id;
+
+        await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+        allOrgUsers = await dbContext.Users
+        .Where(u => u.ManagedOrganizations.Any(m => m.OrganizationId == organizationId))
+        .OrderBy(u => u.DisplayName)
+        .AsNoTracking()
+        .ToListAsync();
 
         if (IsNew)
         {
-            groupModel = new Group();
+            viewModel = new GroupViewModel();
         }
         else
         {
-            await using var dbContext = await DbContextFactory.CreateDbContextAsync();
-            var dbGroup = await dbContext.Groups.FirstOrDefaultAsync(g => g.Id == GroupId && g.OrganizationId == organizationId);
+            var dbGroup = await dbContext.Groups
+            .Include(g => g.Users)
+            .Include(g => g.Claims)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(g => g.Id == GroupId && g.OrganizationId == organizationId);
+
             if (dbGroup != null)
             {
-                groupModel = dbGroup;
+
+                viewModel = new GroupViewModel
+                {
+                    Name = dbGroup.Name,
+                    Description = dbGroup.Description,
+                    SelectedUserIds = dbGroup.Users.Select(u => u.Id).ToList(),
+                    Claims = dbGroup.Claims
+                .Select(c => new GroupClaimViewModel { Type = c.Type, Value = c.Value })
+                .ToList()
+                };
             }
             else
             {
@@ -103,30 +212,74 @@ else
         }
         isLoading = false;
     }
+    #endregion
 
+    #region Event Handlers & Save Logic
     private async Task HandleSave()
     {
         errorMessage = null;
         await using var dbContext = await DbContextFactory.CreateDbContextAsync();
 
+        // Check for duplicate group name within the same organization
         var nameExists = await dbContext.Groups
-        .AnyAsync(g => g.Name == groupModel.Name && g.OrganizationId == organizationId && g.Id != groupModel.Id);
+        .AnyAsync(g => g.Name == viewModel.Name &&
+        g.OrganizationId == organizationId &&
+        g.Id != GroupId);
+
         if (nameExists)
         {
-            errorMessage = $"A group with the name '{groupModel.Name}' already exists in this organization.";
+            errorMessage = $"A group with the name '{viewModel.Name}' already exists in this organization.";
             return;
         }
 
         try
         {
+            var validClaims = viewModel.Claims
+            .Where(c => !string.IsNullOrWhiteSpace(c.Type) &&
+                        !string.IsNullOrWhiteSpace(c.Value))
+            .ToList();
             if (IsNew)
             {
-                groupModel.OrganizationId = organizationId;
-                dbContext.Groups.Add(groupModel);
+                var newGroup = new Group
+                {
+                    Name = viewModel.Name,
+                    Description = viewModel.Description,
+                    OrganizationId = organizationId,
+                    Users = await dbContext.Users.Where(u => viewModel.SelectedUserIds.Contains(u.Id)).ToListAsync(),
+                    Claims = validClaims.Select(c => new GroupClaim { Type = c.Type, Value = c.Value }).ToList()
+                };
+                dbContext.Groups.Add(newGroup);
             }
             else
             {
-                dbContext.Groups.Update(groupModel);
+                var groupToUpdate = await dbContext.Groups
+                .Include(g => g.Users)
+                .Include(g => g.Claims)
+                .FirstOrDefaultAsync(g => g.Id == GroupId);
+
+                if (groupToUpdate == null)
+                {
+                    errorMessage = "Group not found.";
+                    return;
+                }
+
+
+                groupToUpdate.Name = viewModel.Name;
+                groupToUpdate.Description = viewModel.Description;
+                // Sync the collections
+                groupToUpdate.Users.SyncCollection(
+                viewModel.SelectedUserIds,
+                user => user.Id,
+                id => id,
+                id => dbContext.Users.Find(id)!
+                );
+
+                groupToUpdate.Claims.SyncCollection(
+                validClaims,
+                claim => $"{claim.Type}:{claim.Value}",
+                vm => $"{vm.Type}:{vm.Value}",
+                vm => new GroupClaim { Type = vm.Type, Value = vm.Value }
+                );
             }
             await dbContext.SaveChangesAsync();
             NavigateBack();
@@ -138,8 +291,67 @@ else
         }
     }
 
+    private IEnumerable<ApplicationUser> GetSelectedUsers() =>
+    allOrgUsers.Where(u => viewModel.SelectedUserIds.Contains(u.Id));
+    private void SelectUser(Guid userId)
+    {
+        if (!viewModel.SelectedUserIds.Contains(userId))
+        {
+            viewModel.SelectedUserIds.Add(userId);
+        }
+        userSearchText = string.Empty; // Clear search text after selection
+        isUserDropdownOpen = false;
+        showUsers = true;
+    }
+    private void RemoveUser(Guid userId) => viewModel.SelectedUserIds.Remove(userId);
+    private bool IsUserAvailable(ApplicationUser user)
+    {
+        if (viewModel.SelectedUserIds.Contains(user.Id))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(userSearchText))
+            return true;
+
+        bool nameMatches = user.DisplayName?.Contains(userSearchText, StringComparison.OrdinalIgnoreCase) == true;
+        bool emailMatches = user.Email?.Contains(userSearchText, StringComparison.OrdinalIgnoreCase) == true;
+
+        return nameMatches || emailMatches;
+    }
+
+    private void AddClaim()
+    {
+        viewModel.Claims.Add(new GroupClaimViewModel());
+    }
+    private void RemoveClaim(GroupClaimViewModel claim)
+    {
+        viewModel.Claims.Remove(claim);
+    }
+
     private void NavigateBack()
     {
         NavigationManager.NavigateTo($"/groups");
+    }
+    #endregion
+
+    public class GroupViewModel
+    {
+        [Required]
+        [MaxLength(256)]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(1024)]
+        public string? Description { get; set; }
+
+        public List<Guid> SelectedUserIds { get; set; } = new();
+        public List<GroupClaimViewModel> Claims { get; set; } = new();
+    }
+
+    public class GroupClaimViewModel
+    {
+        public Guid TempId { get; set; } = Guid.NewGuid();
+        [Required]
+        public string Type { get; set; } = string.Empty;
+        [Required]
+        public string Value { get; set; } = string.Empty;
     }
 }
