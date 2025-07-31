@@ -3,6 +3,7 @@
 @attribute [Authorize(Policy = "IsManager")]
 @rendermode InteractiveServer
 
+@using Duende.IdentityServer.EntityFramework.Entities
 @using Microsoft.EntityFrameworkCore
 @using System.ComponentModel.DataAnnotations
 @using System.Text.RegularExpressions
@@ -12,6 +13,7 @@
 
 @inject ILogger<OrganizationAddEdit> Logger
 @inject IDbContextFactory<ApplicationDbContext> DbContextFactory
+@inject IDbContextFactory<Duende.IdentityServer.EntityFramework.DbContexts.ConfigurationDbContext> ConfigurationDbContextFactory
 @inject NavigationManager NavigationManager
 @inject AppState AppState
 
@@ -34,37 +36,73 @@ else
             </button>
         </div>
 
-        <EditForm Model="organizationModel" OnValidSubmit="HandleSave">
+        <EditForm Model="organizationViewModel" OnValidSubmit="HandleSave">
             <DataAnnotationsValidator />
 
             <div class="form-grid">
-                <!-- Name -->
-                <div class="form-group">
-                    <label for="name">Organization Name</label>
-                    <InputText id="name" @bind-Value="organizationModel.Name" @oninput="GenerateSlugFromName"
-                        class="form-input" />
-                    <ValidationMessage For="@(() => organizationModel.Name)" />
-                </div>
 
-                <!-- Slug -->
                 <div class="form-group">
-                    <label for="slug">Slug (URL)</label>
-                    <InputText id="slug" @bind-Value="organizationModel.Slug" @oninput="() => slugManuallyEdited = true"
-                        class="form-input" />
-                    <ValidationMessage For="@(() => organizationModel.Slug)" />
+                    <label for="name">Organization Name<span class="required-asterisk">*</span></label>
+                    <InputText id="name" @bind-Value="organizationViewModel.Name" @oninput="GenerateSlugFromName"
+                               class="form-input" />
+                    <ValidationMessage For="@(() => organizationViewModel.Name)" />
                 </div>
-
-                <!-- Description -->
+                <div class="form-group">
+                    <label for="slug">Slug (URL)<span class="required-asterisk">*</span></label>
+                    <InputText id="slug" @bind-Value="organizationViewModel.Slug" @oninput="() => slugManuallyEdited = true"
+                               class="form-input" />
+                    <ValidationMessage For="@(() => organizationViewModel.Slug)" />
+                </div>
                 <div class="form-group full-width">
                     <label for="description">Description</label>
-                    <InputTextArea id="description" @bind-Value="organizationModel.Description" class="form-textarea"
-                        rows="4" />
+                    <InputTextArea id="description" @bind-Value="organizationViewModel.Description" class="form-textarea"
+                                   rows="4" />
+                </div>
+                <div class="form-group-checkbox full-width">
+                    <InputCheckbox id="isActive" @bind-Value="organizationViewModel.IsActive" />
+                    <label for="isActive">Organization is Active</label>
                 </div>
 
-                <!-- IsActive -->
-                <div class="form-group-checkbox full-width">
-                    <InputCheckbox id="isActive" @bind-Value="organizationModel.IsActive" />
-                    <label for="isActive">Organization is Active</label>
+                <h2 class="form-section-header">Client Permissions</h2>
+                <div class="form-group-checkbox">
+                    <InputCheckbox @bind-Value="allowAllManagerClients" id="allowAllClients" />
+                    <label for="allowAllClients">Allow assigning any client you manage</label>
+                </div>
+
+                <div class="form-group">
+                    <div class="form-label-group">
+                        <label>Allowed Clients</label>
+                        <small class="text-muted">Select which clients all users in this organization can access</small>
+                    </div>
+                    <div class="multi-select-wrapper">
+                        <div class="multi-select-container" @onclick="() => isClientDropdownOpen = !isClientDropdownOpen">
+                            @if (!GetSelectedClients().Any())
+                            {
+                                <span class="multi-select-placeholder">Select a client to allow...</span>
+                            }
+                            @foreach (var selectedClient in GetSelectedClients())
+                            {
+                                <div class="selected-item">
+                                    <span>@selectedClient.ClientName</span>
+                                    <button type="button" class="remove-item-btn" @onclick="() => RemoveClient(selectedClient.Id)" @onclick:stopPropagation>&times;</button>
+                                </div>
+                            }
+                        </div>
+
+                        @if (isClientDropdownOpen)
+                        {
+                            <ul class="multi-select-dropdown">
+                                @foreach (var client in availableClients)
+                                {
+                                    <li @onclick="() => SelectClient(client.Id)">@client.ClientName (@client.ClientId)</li>
+                                }
+                                @if (!availableClients.Any())
+                                {
+                                    <li class="disabled">No other clients available to add</li>
+                                }
+                            </ul>
+                        }
+                    </div>
                 </div>
             </div>
 
@@ -85,40 +123,102 @@ else
 
 
 @code {
+    #region Parameters & State
     [Parameter]
     public Guid? Id { get; set; }
-
-    private Organization organizationModel = new();
+    private OrganizationViewModel organizationViewModel = new();
     private bool isLoading = true;
     private bool IsNew => Id == null;
     private bool slugManuallyEdited = false;
     private string? errorMessage;
+
+    // State for client permissions
+    private bool isClientDropdownOpen = false;
+    private List<int> clientIdsForThisOrg = new();
+    private List<Client> allManageableClients = new();
+    private List<Client> clientViewList = new();
+
+    private List<Client> availableClients => clientViewList.Where(c => !organizationViewModel.SelectedClientIds.Contains(c.Id)).ToList();
+    private bool _allowAllManagerClients;
+    private bool allowAllManagerClients
+    {
+        get => _allowAllManagerClients;
+        set
+        {
+            _allowAllManagerClients = value;
+            UpdateClientSourceList();
+            // Clearing selected items that are no longer available
+            organizationViewModel.SelectedClientIds = organizationViewModel.SelectedClientIds
+                .Intersect(clientViewList.Select(c => c.Id))
+                .ToList();
+        }
+    }
+    #endregion
+
+    #region Lifecycle & Data Loading
     protected override async Task OnParametersSetAsync()
     {
         isLoading = true;
+        await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+
+        var managedOrgIds = AppState.UserOrganizations.Select(o => o.Id).ToList();
+        var allClientOwnerships = await dbContext.ClientOwnerships
+            .Where(co => managedOrgIds.Contains(co.OrganizationId))
+            .AsNoTracking()
+            .ToListAsync();
+
+        var manageableClientIds = allClientOwnerships
+            .Select(co => co.ClientId)
+            .Distinct().ToList();
+
+        await using var configDbContext = await ConfigurationDbContextFactory.CreateDbContextAsync();
+        allManageableClients = await configDbContext.Clients
+            .Where(c => manageableClientIds.Contains(c.Id))
+            .AsNoTracking()
+            .ToListAsync();
 
         if (IsNew)
         {
-            organizationModel = new Organization { IsActive = true };
+            organizationViewModel = new OrganizationViewModel { IsActive = true };
             slugManuallyEdited = false;
         }
         else
         {
-            await using var dbContext = await DbContextFactory.CreateDbContextAsync();
-            var dbOrganization = await dbContext.Organizations.FirstOrDefaultAsync(o => o.Id == Id);
+            var dbOrganization = await dbContext.Organizations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(o => o.Id == Id);
 
             if (dbOrganization != null)
             {
-                organizationModel = dbOrganization;
+
+                organizationViewModel = new OrganizationViewModel
+                {
+                    Name = dbOrganization.Name,
+                    Slug = dbOrganization.Slug,
+                    Description = dbOrganization.Description,
+                    IsActive = dbOrganization.IsActive,
+                    SelectedClientIds = await dbContext.OrganizationClientPermissions
+                        .Where(ocp => ocp.OrganizationId == dbOrganization.Id)
+                        .Select(ocp => ocp.ClientId)
+                        .ToListAsync()
+                };
+
                 slugManuallyEdited = true;
+
+                clientIdsForThisOrg = allClientOwnerships
+                    .Where(co => co.OrganizationId == Id)
+                    .Select(co => co.ClientId)
+                    .Distinct()
+                    .ToList();
             }
             else
             {
                 Logger.LogError("Organization with ID {Id} not found.", Id);
                 NavigateBack();
+                return;
             }
         }
-
+        UpdateClientSourceList();
         isLoading = false;
     }
 
@@ -130,54 +230,88 @@ else
             var slug = name.ToLower().Trim();
             slug = Regex.Replace(slug, @"\s+", "-");
             slug = Regex.Replace(slug, @"[^a-z0-9-]", "");
-            organizationModel.Slug = slug;
+            organizationViewModel.Slug = slug;
         }
     }
+    #endregion
 
+    #region Event Handlers & Navigation
     private async Task HandleSave()
     {
         errorMessage = null;
         if (AppState.CurrentUser == null)
         {
             errorMessage = "Error: User is not authenticated.";
-            Logger.LogError("Cannot save organization, user is not authenticated.");
             return;
         }
 
         await using var dbContext = await DbContextFactory.CreateDbContextAsync();
-
         var slugExists = await dbContext.Organizations
-        .AnyAsync(o => o.Slug == organizationModel.Slug && o.Id != organizationModel.Id);
+            .AnyAsync(o => o.Slug == organizationViewModel.Slug && o.Id != Id);
 
         if (slugExists)
         {
-            errorMessage = $"Error: The slug '{organizationModel.Slug}' is already in use. Please choose a different one.";
+            errorMessage = $"Error: The slug '{organizationViewModel.Slug}' is already in use. Please choose a different one.";
             return;
         }
+
         try
         {
             if (IsNew)
             {
-                organizationModel.CreatedDate = DateTime.UtcNow;
-                organizationModel.ModifiedDate = DateTime.UtcNow;
 
-                dbContext.Organizations.Add(organizationModel);
+                var newOrganization = new Organization
+                {
+                    Name = organizationViewModel.Name,
+                    Slug = organizationViewModel.Slug,
+                    Description = organizationViewModel.Description,
+                    IsActive = organizationViewModel.IsActive,
+                    CreatedDate = DateTime.UtcNow,
+                    ModifiedDate = DateTime.UtcNow
+                };
+                dbContext.Organizations.Add(newOrganization);
 
                 var userRole = new UserOrganizationRole
                 {
                     UserId = AppState.CurrentUser.Id,
-                    OrganizationId = organizationModel.Id,
+                    Organization = newOrganization, // Link to the new entity
                     Role = OrganizationRole.Owner
                 };
                 dbContext.UserOrganizationRoles.Add(userRole);
 
-                Logger.LogInformation("Creating new organization '{Name}'.", organizationModel.Name);
+                foreach (var clientId in organizationViewModel.SelectedClientIds)
+                {
+                    dbContext.OrganizationClientPermissions.Add(new OrganizationClientPermission
+                    {
+                        Organization = newOrganization,
+                        ClientId = clientId
+                    });
+                }
+                Logger.LogInformation("Creating new organization '{Name}' ...", organizationViewModel.Name);
             }
             else
             {
-                organizationModel.ModifiedDate = DateTime.UtcNow;
-                dbContext.Organizations.Update(organizationModel);
-                Logger.LogInformation("Updating organization {Id}.", organizationModel.Id);
+                var orgToUpdate = await dbContext.Organizations
+                    .Include(o => o.AllowedClientPermissions)
+                    .FirstOrDefaultAsync(o => o.Id == Id);
+
+                if (orgToUpdate == null)
+                {
+                    errorMessage = "Error: The organization you are trying to edit no longer exists.";
+                    return;
+                }
+
+                // Update scalar properties from the ViewModel
+                dbContext.Entry(orgToUpdate).CurrentValues.SetValues(organizationViewModel);
+                orgToUpdate.ModifiedDate = DateTime.UtcNow;
+
+                orgToUpdate.AllowedClientPermissions.SyncCollection(
+                    organizationViewModel.SelectedClientIds,
+                    permission => permission.ClientId,
+                    id => id,
+                    id => new OrganizationClientPermission { ClientId = id }
+                );
+                Logger.LogInformation("Updating organization {Id} ...", orgToUpdate.Id);
             }
 
             await dbContext.SaveChangesAsync();
@@ -191,8 +325,55 @@ else
         }
     }
 
+    private void UpdateClientSourceList()
+    {
+        if (allowAllManagerClients)
+        {
+            clientViewList = allManageableClients;
+        }
+        else if (IsNew)
+        {
+            clientViewList = new();
+        }
+        else
+        {
+            clientViewList = allManageableClients
+                .Where(c => clientIdsForThisOrg.Contains(c.Id))
+                .ToList();
+        }
+    }
+    private IEnumerable<Client> GetSelectedClients() =>
+        allManageableClients.Where(c => organizationViewModel.SelectedClientIds.Contains(c.Id));
+    private void SelectClient(int clientId)
+    {
+        if (!organizationViewModel.SelectedClientIds.Contains(clientId))
+        {
+            organizationViewModel.SelectedClientIds.Add(clientId);
+        }
+        isClientDropdownOpen = false;
+    }
+    private void RemoveClient(int clientId) => organizationViewModel.SelectedClientIds.Remove(clientId);
+
     private void NavigateBack()
     {
         NavigationManager.NavigateTo("/organizations");
+    }
+    #endregion
+
+    public class OrganizationViewModel
+    {
+        [Required]
+        [StringLength(256)]
+        public string Name { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(100)]
+        public string Slug { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        public bool IsActive { get; set; } = true;
+
+        public List<int> SelectedClientIds { get; set; } = new();
     }
 }
