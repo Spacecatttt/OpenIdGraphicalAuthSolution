@@ -18,6 +18,7 @@ using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
 
 using Serilog;
+using Duende.IdentityServer.EntityFramework.DbContexts;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -187,8 +188,5 @@ app.MapRazorPages();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.MapAccountEndpoints();
-
-// Initialize IdentityServer
-//new SeedData().EnsureSeedData(app);
 
 app.Run();
