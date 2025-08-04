@@ -1,6 +1,6 @@
 @page "/users/add"
 @page "/users/edit/{UserId:guid}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "IsManager")]
 @rendermode InteractiveServer
 
 @using System.ComponentModel.DataAnnotations
@@ -144,7 +144,9 @@ else
                 <div class="form-group">
                     <label for="role">Role in Organization</label>
                     <InputSelect @bind-Value="userModel.Role" TValue="OrganizationRole" class="form-input">
-                        @foreach (var role in Enum.GetValues<OrganizationRole>())
+                        @foreach (var role in Enum.GetValues<OrganizationRole>()
+                                                  .Cast<OrganizationRole>()
+                                                  .Where(r => r <= AppState.CurrentUserRoleInSelectedOrg))
                         {
                             <option value="@role">@role.ToString()</option>
                         }
@@ -343,7 +345,7 @@ else
 
         return new UserViewModel
         {
-            Role = OrganizationRole.Viewer,
+            Role = OrganizationRole.Member,
             UserName = newUserName,
             Password = HelperService.GeneratePassword(16)
         };
@@ -373,19 +375,25 @@ else
             if (IsNew)
             {
                 await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+                Guid? primaryOrgId = null;
 
-                // Create a personal organization for the new user
-                var personalOrg = new Organization
+                if (userModel.Role >= OrganizationRole.Viewer)
                 {
-                    Name = $"{userModel.UserName}'s Personal Space",
-                    Slug = $"{userModel.UserName}-personal-space",
-                    CreatedDate = DateTime.UtcNow,
-                    ModifiedDate = DateTime.UtcNow
-                };
-                dbContext.Organizations.Add(personalOrg);
-                await dbContext.SaveChangesAsync();
+                    // Create a personal organization for the new user
+                    var personalOrg = new Organization
+                    {
+                        Name = $"{userModel.UserName}'s Personal Space",
+                        Slug = $"{userModel.UserName}-personal-space",
+                        CreatedDate = DateTime.UtcNow,
+                        ModifiedDate = DateTime.UtcNow
+                    };
+                    dbContext.Organizations.Add(personalOrg);
+                    await dbContext.SaveChangesAsync();
+                    primaryOrgId = personalOrg.Id;
+                }
 
-                //Create new user and set their PrimaryOrganizationId
+                // Create new user and set their PrimaryOrganizationId
+                // For 'Member' role, primaryOrgId remains null.
                 var newUser = new ApplicationUser
                 {
                     UserName = userModel.UserName,
@@ -397,7 +405,7 @@ else
                     Address = userModel.Address,
                     Bio = userModel.Bio,
                     GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ? userModel.GraphicalAuthType : null,
-                    PrimaryOrganizationId = personalOrg.Id
+                    PrimaryOrganizationId = primaryOrgId
                 };
                 var result = await UserManager.CreateAsync(newUser, userModel.Password);
 

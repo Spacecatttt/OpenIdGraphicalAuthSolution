@@ -86,46 +86,31 @@ public static class AccountEndpoints
             [FromBody] UserInputModel userInput,
             UserManager<ApplicationUser> userManager) =>
         {
-            var validationContext = new ValidationContext(userInput);
-            var validationResults = new List<ValidationResult>();
-            if (!Validator.TryValidateObject(userInput, validationContext, validationResults, true))
+            var customErrors = new Dictionary<string, string[]>();
+            var existingUserByEmail = await userManager.FindByEmailAsync(userInput.Email);
+
+            if (existingUserByEmail != null && existingUserByEmail.PrimaryOrganizationId != null)
             {
-                return Results.ValidationProblem(validationResults.ToDictionary(
-                    vr => vr.MemberNames.FirstOrDefault() ?? string.Empty,
-                    vr => vr.ErrorMessage is not null ? new[] { vr.ErrorMessage } : Array.Empty<string>()
-                ));
+                customErrors.Add(nameof(UserInputModel.Email),
+                new[] { "An account with this email already exists. Please try logging in instead." });
             }
 
-            var customErrors = new Dictionary<string, string[]>();
-            if (await userManager.FindByNameAsync(userInput.UserName) != null)
+            var existingUserByName = await userManager.FindByNameAsync(userInput.UserName);
+            if (existingUserByName != null)
             {
                 customErrors.Add(nameof(UserInputModel.UserName), new[] { "A user with this username already exists." });
             }
-            if (await userManager.FindByEmailAsync(userInput.Email) != null)
-            {
-                customErrors.Add(nameof(UserInputModel.Email), new[] { "A user with this email address already exists." });
-            }
 
-            var dummyUser = new ApplicationUser
+            if (customErrors.Any())
             {
-                UserName = userInput.UserName,
-                Email = userInput.Email
-            };
-
-            foreach (var validator in userManager.PasswordValidators)
-            {
-                var result = await validator.ValidateAsync(userManager, dummyUser, userInput.Password);
-                if (!result.Succeeded)
-                {
-                    customErrors.Add(nameof(UserInputModel.Password), result.Errors.Select(e => e.Description).ToArray());
-                    break;
-                }
-            }
-
-            if (customErrors.Count > 0)
                 return Results.ValidationProblem(customErrors);
+            }
 
-            return Results.Ok();
+            return Results.Ok(new UserValidationResponse
+            {
+                CanProceed = true,
+                IsExistingEndUser = existingUserByEmail != null && existingUserByEmail.PrimaryOrganizationId == null
+            });
         });
 
         app.MapPost("/account/register", async (
@@ -135,22 +120,9 @@ public static class AccountEndpoints
             ApplicationDbContext dbContext,
             ILogger<Program> logger) =>
         {
-            var allValidationResults = new List<ValidationResult>();
-            var userValidationContext = new ValidationContext(input.User);
-            Validator.TryValidateObject(input.User, userValidationContext, allValidationResults, true);
-            var orgValidationContext = new ValidationContext(input.Organization);
-            Validator.TryValidateObject(input.Organization, orgValidationContext, allValidationResults, true);
-
-            if (allValidationResults.Count > 0)
-            {
-                var errorMessage = string.Join(" ", allValidationResults.Select(v => v.ErrorMessage));
-                var encodedError = WebUtility.UrlEncode(errorMessage);
-                return Results.Redirect($"/account/register?postSubmitError={encodedError}");
-            }
-
             if (await dbContext.Organizations.AnyAsync(o => o.Slug == input.Organization.Slug))
             {
-                var errorMessage = "An organization with that slug already exists. Please choose a different name or edit the slug.";
+                var errorMessage = "An organization with this slug already exists. Please choose a different name or edit the slug.";
                 var encodedError = WebUtility.UrlEncode(errorMessage);
                 return Results.Redirect($"/account/register?postSubmitError={encodedError}");
             }
@@ -163,33 +135,60 @@ public static class AccountEndpoints
                     Name = input.Organization.Name,
                     Description = input.Organization.Description,
                     Slug = input.Organization.Slug,
-                    IsActive = true
+                    IsActive = true,
+                    CreatedDate = DateTime.UtcNow,
+                    ModifiedDate = DateTime.UtcNow
                 };
                 dbContext.Organizations.Add(organization);
                 await dbContext.SaveChangesAsync();
 
-                var user = new ApplicationUser
-                {
-                    UserName = input.User.UserName,
-                    DisplayName = input.User.DisplayName,
-                    Email = input.User.Email,
-                    PrimaryOrganizationId = organization.Id
-                };
-                var result = await userManager.CreateAsync(user, input.User.Password);
+                ApplicationUser userToSignIn;
 
-                if (result.Succeeded)
+                var existingUser = await userManager.FindByEmailAsync(input.User.Email) ??
+                    throw new InvalidOperationException("User for upgrade not found.");
+
+                if (existingUser != null && existingUser.PrimaryOrganizationId == null)
                 {
-                    await transaction.CommitAsync();
-                    await signInManager.SignInAsync(user, isPersistent: false);
-                    return Results.Redirect("/");
+                    existingUser.PrimaryOrganizationId = organization.Id;
+                    existingUser.UserName = input.User.UserName;
+                    existingUser.DisplayName = input.User.DisplayName;
+
+                    // update password
+                    if (await userManager.HasPasswordAsync(existingUser))
+                    {
+                        var token = await userManager.GeneratePasswordResetTokenAsync(existingUser);
+                        await userManager.ResetPasswordAsync(existingUser, token, input.User.Password);
+                    }
+                    else
+                    {
+                        await userManager.AddPasswordAsync(existingUser, input.User.Password);
+                    }
+
+                    await userManager.UpdateAsync(existingUser);
+                    userToSignIn = existingUser;
+
+                    var updateResult = await userManager.UpdateAsync(existingUser);
+                    if (!updateResult.Succeeded)
+                        throw new Exception(string.Join(", ", updateResult.Errors.Select(e => e.Description)));
+                    userToSignIn = existingUser;
                 }
                 else
                 {
-                    await transaction.RollbackAsync();
-                    var errorMessage = string.Join(" ", result.Errors.Select(e => e.Description));
-                    var encodedError = WebUtility.UrlEncode(errorMessage);
-                    return Results.Redirect($"/account/register?postSubmitError={encodedError}");
+                    var newUser = new ApplicationUser
+                    {
+                        UserName = input.User.UserName,
+                        Email = input.User.Email,
+                        DisplayName = input.User.DisplayName,
+                        PrimaryOrganizationId = organization.Id
+                    };
+                    var createResult = await userManager.CreateAsync(newUser, input.User.Password);
+                    if (!createResult.Succeeded) throw new Exception(string.Join(", ", createResult.Errors.Select(e => e.Description)));
+                    userToSignIn = newUser;
                 }
+
+                await transaction.CommitAsync();
+                await signInManager.SignInAsync(userToSignIn, isPersistent: false);
+                return Results.Redirect("/");
             }
             catch (Exception ex)
             {
@@ -228,6 +227,7 @@ public class RegistrationInputModel
 {
     public UserInputModel User { get; set; } = new();
     public OrganizationInputModel Organization { get; set; } = new();
+    public bool IsUpgrade { get; set; } // <-- ДОДАЙТЕ ЦЕЙ РЯДОК
 }
 public class UserInputModel
 {
@@ -250,4 +250,10 @@ public class OrganizationInputModel
     [Required] public string Name { get; set; } = "";
     public string? Description { get; set; }
     [Required] public string Slug { get; set; } = "";
+}
+public class UserValidationResponse
+{
+    public bool CanProceed { get; set; }
+    public bool IsExistingEndUser { get; set; }
+    public Dictionary<string, string[]>? Errors { get; set; }
 }

@@ -64,7 +64,7 @@ img {
     transition: box-shadow 0.2s, border-color 0.2s;
 }
 
-.form-floating > label {
+.form-floating>label {
     color: var(--text-secondary);
 }
 
@@ -112,7 +112,7 @@ img {
     font-family: inherit;
 
     display: inline;
-    color: #2f2f2f;
+    color: var(--accent-purple);
     margin-right: 10px;
     font-size: 16px;
     text-decoration: underline;

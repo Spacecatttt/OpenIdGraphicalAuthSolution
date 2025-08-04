@@ -28,6 +28,17 @@
     margin: 0;
 }
 
+.form-section-header {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-top: 1rem;
+    margin-bottom: 0;
+}
+
+
 /* A grid system for laying out form fields */
 .form-grid {
     display: grid;
@@ -51,6 +62,17 @@
 .form-group {
     display: flex;
     flex-direction: column;
+}
+
+.form-label-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.5rem;
+}
+
+.form-label-group label {
+    margin-bottom: 0;
 }
 
 .form-group label {
@@ -155,4 +177,137 @@
 .invalid .form-input,
 .invalid .form-textarea {
     border-color: #ef4444;
+}
+
+/* --- Selected Items / Tags Display --- */
+
+.selected-item {
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--accent-active);
+    color: var(--text-primary);
+    border-radius: 9999px;
+    /* Pill shape */
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.remove-item-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1.25rem;
+    line-height: 1;
+    margin-left: 0.5rem;
+    padding: 0;
+}
+
+.remove-item-btn:hover {
+    color: var(--text-primary);
+}
+
+/* --- Multi-Select Dropdown Component --- */
+
+.multi-select-wrapper {
+    position: relative;
+}
+
+.multi-select-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    min-height: 44px;
+    /* Align with other inputs */
+    background-color: var(--bg-color);
+    cursor: pointer;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.multi-select-container:hover {
+    border-color: var(--text-secondary);
+}
+
+.multi-select-placeholder {
+    color: var(--text-secondary);
+    align-self: center;
+}
+
+.multi-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--secondary-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-top: 0.25rem;
+    padding: 0.5rem 0;
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.multi-select-dropdown li {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.multi-select-dropdown li:hover {
+    background-color: var(--accent-active);
+}
+
+.multi-select-dropdown li.disabled {
+    color: var(--text-secondary);
+    cursor: not-allowed;
+}
+
+/* --- Custom Checkbox --- */
+.form-group-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.form-group-checkbox label {
+    margin-bottom: 0;
+}
+
+.form-group-checkbox ::deep input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    cursor: pointer;
+    position: relative;
+    background-color: var(--bg-color);
+}
+
+.form-group-checkbox ::deep input[type="checkbox"]:checked {
+    background-color: var(--accent-purple);
+    border-color: var(--accent-purple);
+}
+
+.form-group-checkbox ::deep input[type="checkbox"]:checked::after {
+    content: '✔';
+    position: absolute;
+    color: white;
+    font-size: 0.8rem;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Red asterisk for marking required fields */
+.required-asterisk {
+    color: #ef4444;
+    margin-left: 0.25rem;
 }

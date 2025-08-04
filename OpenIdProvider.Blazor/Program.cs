@@ -18,6 +18,7 @@ using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
 
 using Serilog;
+using Duende.IdentityServer.EntityFramework.DbContexts;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -39,7 +40,12 @@ var migrationsAssembly = typeof(ApplicationDbContext).Assembly.GetName().Name;
 // --- Authentication & Authorization Configuration ---
 
 // Add authentication and authorization for application
-builder.Services.AddAuthorization();
+builder.Services.AddScoped<IAuthorizationHandler, ManagerUserHandler>();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("IsManager", policy =>
+        policy.Requirements.Add(new ManagerUserRequirement()));
+});
 
 // ASP.NET Core Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
@@ -182,9 +188,5 @@ app.MapRazorPages();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.MapAccountEndpoints();
-
-// Initialize IdentityServer
-// SeedData.EnsureSeedData(app);
-// AddData.EnsureSeedData(app);
 
 app.Run();

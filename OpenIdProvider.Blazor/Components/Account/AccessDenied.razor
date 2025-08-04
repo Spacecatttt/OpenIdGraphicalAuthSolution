@@ -1,0 +1,18 @@
+@page "/Account/AccessDenied"
+@layout DefaultLayout
+@attribute [AllowAnonymous]
+
+<PageTitle>Access Denied</PageTitle>
+
+<div class="form-container">
+    <div class="form-header">
+        <h1>Access Denied</h1>
+    </div>
+    <div class="text-center p-4">
+        <p class="error-message" style="margin-top: 0;">You do not have permission to access this resource.</p>
+        <p>
+            If you believe you should have access, please contact your organization's administrator.
+        </p>
+        <a href="/account/register" class="btn btn-primary mt-4">Go to Sign up page</a>
+    </div>
+</div>

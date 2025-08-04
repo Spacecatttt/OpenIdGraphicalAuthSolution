@@ -1,5 +1,5 @@
 @page "/groups"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "IsManager")]
 @rendermode InteractiveServer
 
 @using Microsoft.EntityFrameworkCore

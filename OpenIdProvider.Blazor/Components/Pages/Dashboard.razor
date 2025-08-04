@@ -1,5 +1,5 @@
 ﻿@page "/"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "IsManager")]
 @rendermode InteractiveServer
 
 @using Microsoft.EntityFrameworkCore
@@ -164,7 +164,6 @@ Labels = new YAxisLabels { Formatter = "function(val) { return val.toFixed(0); }
             {
                 var today = DateTime.UtcNow.Date;
                 var managedUsers = organization.ManagedByUsers.ToList();
-                managedUsers.AddRange(GenerateTestUsers()); //TODO : Remove this line in production
 
                 var newData = new DashboardData
                 {
@@ -192,6 +191,7 @@ Labels = new YAxisLabels { Formatter = "function(val) { return val.toFixed(0); }
         isLoading = false;
         await InvokeAsync(StateHasChanged);
     }
+    // This method need only for testing scenario during development. Don't use in prod.
     public List<UserOrganizationRole> GenerateTestUsers()
     {
         var userRoles = new List<UserOrganizationRole>();

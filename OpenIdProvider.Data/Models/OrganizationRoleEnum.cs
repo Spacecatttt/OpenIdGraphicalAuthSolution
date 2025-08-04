@@ -4,6 +4,15 @@
 public enum OrganizationRole
 {
     /// <summary>
+    /// Defines a role for end-users who only authenticate via client applications
+    /// and should not have access to the management dashboard.
+    /// Permissions:
+    /// - Can authenticate against allowed clients.
+    /// - No access to view or manage any organization resources in the UI.
+    /// </summary>
+    Member,
+
+    /// <summary>
     /// Grants read-only access to the organization's resources.
     /// Permissions:
     /// - View users, groups, and clients within the organization.

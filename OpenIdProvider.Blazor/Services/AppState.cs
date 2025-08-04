@@ -59,7 +59,11 @@ public class AppState : IDisposable
                     {
                         orgs.Add(userWithData.PrimaryOrganization);
                     }
-                    orgs.AddRange(userWithData.ManagedOrganizations.Select(mo => mo.Organization));
+
+                    var managedOrgs = userWithData.ManagedOrganizations
+                        .Where(mo => mo.Role >= OrganizationRole.Viewer)
+                        .Select(mo => mo.Organization);
+                    orgs.AddRange(managedOrgs);
                     UserOrganizations = orgs.DistinctBy(o => o.Id).ToList();
 
                     var currentSlug = SelectedOrganization?.Slug;
