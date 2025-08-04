@@ -16,6 +16,71 @@ public static class AccountEndpoints
 {
     public static void MapAccountEndpoints(this IEndpointRouteBuilder app)
     {
+        app.MapPost("/account/handle-login", async (
+        HttpContext httpContext,
+        [FromQuery] string? returnUrl,
+        SignInManager<ApplicationUser> signInManager,
+        UserManager<ApplicationUser> userManager) =>
+        {
+            returnUrl ??= "/";
+
+            var form = await httpContext.Request.ReadFormAsync();
+            var input = new LoginInputModel
+            {
+                EmailOrUsername = form["EmailOrUsername"].ToString(),
+                Password = form["Password"],
+                RememberMe = form["RememberMe"].Contains("true"),
+                GraphicalPasswordFile = form.Files.GetFile("GraphicalPasswordFile")
+            };
+
+            // Validation logic ---
+            var validationResults = new List<ValidationResult>();
+            var validationContext = new ValidationContext(input);
+            string? encodedError;
+            if (!Validator.TryValidateObject(input, validationContext, validationResults, true))
+            {
+                var errorMessage = string.Join(" ", validationResults.Select(v => v.ErrorMessage));
+                encodedError = WebUtility.UrlEncode(errorMessage);
+                return Results.Redirect($"/account/login?error={encodedError}&returnUrl={returnUrl}");
+            }
+
+            var user = await (input.EmailOrUsername.Contains('@')
+                ? userManager.FindByEmailAsync(input.EmailOrUsername)
+                : userManager.FindByNameAsync(input.EmailOrUsername));
+
+            if (user == null)
+            {
+                var errorMessage = WebUtility.UrlEncode("Invalid email/username or password.");
+                return Results.Redirect($"/account/login?error={errorMessage}&returnUrl={returnUrl}");
+            }
+
+            // Graphical Password
+            if (input.GraphicalPasswordFile is not null)
+            {
+                // TODO: Implement actual hash generation logic here
+                // var generatedHash = await GenerateHashFromImageAsync(input.GraphicalPasswordFile);
+                var generatedHash = "placeholder-hash-from-image"; // Placeholder
+
+                if (user.GraphicalPasswordHash == generatedHash)
+                {
+                    await signInManager.SignInAsync(user, input.RememberMe);
+                    return Results.Redirect(returnUrl);
+                }
+            }
+            // Standard Password
+            else if (!string.IsNullOrEmpty(input.Password))
+            {
+                var result = await signInManager.PasswordSignInAsync(user, input.Password, input.RememberMe, lockoutOnFailure: true);
+                if (result.Succeeded)
+                {
+                    return Results.Redirect(returnUrl);
+                }
+            }
+
+            var failMessage = "Invalid email/username or password.";
+            encodedError = WebUtility.UrlEncode(failMessage);
+            return Results.Redirect($"/account/login?error={encodedError}&returnUrl={returnUrl}");
+        });
 
         app.MapPost("/account/validate-user-step", async (
             [FromBody] UserInputModel userInput,
@@ -143,6 +208,22 @@ public static class AccountEndpoints
     }
 }
 
+public class LoginInputModel : IValidatableObject
+{
+    [Required(ErrorMessage = "Please input your Email or Username.")]
+    public string EmailOrUsername { get; set; } = string.Empty;
+    public string? Password { get; set; }
+    public IFormFile? GraphicalPasswordFile { get; set; }
+    public bool RememberMe { get; set; }
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (string.IsNullOrEmpty(Password) && GraphicalPasswordFile is null)
+        {
+            yield return new ValidationResult(
+                "Please provide either a password or a graphical password file.");
+        }
+    }
+}
 public class RegistrationInputModel
 {
     public UserInputModel User { get; set; } = new();
