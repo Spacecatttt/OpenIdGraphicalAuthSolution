@@ -226,15 +226,6 @@ else
                                 {
                                     <li @onclick="() => SelectScope(scope)">@scope</li>
                                 }
-
-                                <li class="multi-select-custom-add">
-                                    <div class="add-item-form" @onclick:stopPropagation>
-                                        <input @bind="newCustomScope"
-                                               placeholder="Enter custom scope..."
-                                               class="form-input" />
-                                        <button type="button" class="btn btn-secondary" @onclick="AddCustomScope">Add</button>
-                                    </div>
-                                </li>
                             </ul>
                         }
                     </div>
@@ -309,7 +300,6 @@ else
     private List<string> availableGrantTypes => allGrantTypes.Except(clientModel.AllowedGrantTypes).ToList();
 
     private bool isScopeDropdownOpen = false;
-    private string newCustomScope = string.Empty;
     private List<string> standardScopes = new() { "openid", "profile", "email"};
     private List<string> availableStandardScopes => standardScopes.Except(clientModel.AllowedScopes).ToList();
     #endregion
@@ -583,15 +573,6 @@ else
         if (!string.IsNullOrEmpty(scope) && !clientModel.AllowedScopes.Contains(scope))
         {
             clientModel.AllowedScopes.Add(scope);
-        }
-        isScopeDropdownOpen = false;
-    }
-    private void AddCustomScope()
-    {
-        if (!string.IsNullOrWhiteSpace(newCustomScope) && !clientModel.AllowedScopes.Contains(newCustomScope))
-        {
-            clientModel.AllowedScopes.Add(newCustomScope);
-            newCustomScope = string.Empty;
         }
         isScopeDropdownOpen = false;
     }
