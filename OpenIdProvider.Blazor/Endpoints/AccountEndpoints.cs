@@ -1,19 +1,29 @@
 using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using Duende.IdentityServer.EntityFramework.DbContexts;
+using Duende.IdentityServer.Services;
+
 using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
+
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using Microsoft.AspNetCore.Authentication;
+using Duende.IdentityServer;
 
 namespace OpenIdProvider.Blazor.Endpoints;
 
 public static class AccountEndpoints
 {
+    private const string InvalidCredentialsError = "Invalid email/username or password.";
     public static void MapAccountEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/account/handle-login", async (
@@ -50,36 +60,178 @@ public static class AccountEndpoints
 
             if (user == null)
             {
-                var errorMessage = WebUtility.UrlEncode("Invalid email/username or password.");
-                return Results.Redirect($"/account/login?error={errorMessage}&returnUrl={returnUrl}");
+                encodedError = WebUtility.UrlEncode(InvalidCredentialsError);
+                return Results.Redirect($"/account/login?error={encodedError}&returnUrl={returnUrl}");
             }
+
+            Microsoft.AspNetCore.Identity.SignInResult result;
+            string passwordToCheck = input.Password ?? string.Empty;
 
             // Graphical Password
             if (input.GraphicalPasswordFile is not null)
             {
-                // TODO: Implement actual hash generation logic here
-                // var generatedHash = await GenerateHashFromImageAsync(input.GraphicalPasswordFile);
-                var generatedHash = "placeholder-hash-from-image"; // Placeholder
-
-                if (user.GraphicalPasswordHash == generatedHash)
+                if (string.IsNullOrEmpty(user.GraphicalPasswordKey))
                 {
-                    await signInManager.SignInAsync(user, input.RememberMe);
-                    return Results.Redirect(returnUrl);
+                    encodedError = WebUtility.UrlEncode("Graphical login is not set up for this user.");
+                    return Results.Redirect($"/account/login?error={encodedError}&returnUrl={returnUrl}");
+                }
+
+                try
+                {
+                    await using var imageStream = input.GraphicalPasswordFile.OpenReadStream();
+                    using var image = await Image.LoadAsync<Rgba32>(imageStream);
+                    // Extract the password from the image
+                    passwordToCheck = ImageSteganographyUtility.ExtractText(image, user.GraphicalPasswordKey);
+                }
+                catch (InvalidOperationException)
+                {
+                    // This is a technical error (e.g., bad file format), not a failed login attempt.
+                    encodedError = WebUtility.UrlEncode("The provided file is invalid or corrupted.");
+                    return Results.Redirect($"/account/login?error={encodedError}&returnUrl={returnUrl}");
+                }
+                catch (CryptographicException)
+                {
+                    await userManager.AccessFailedAsync(user);
+                    encodedError = WebUtility.UrlEncode(InvalidCredentialsError);
+                    return Results.Redirect($"/account/login?error={encodedError}&returnUrl={returnUrl}");
                 }
             }
-            // Standard Password
-            else if (!string.IsNullOrEmpty(input.Password))
+
+            result = await signInManager.PasswordSignInAsync(user, passwordToCheck, input.RememberMe, lockoutOnFailure: true);
+
+            if (result.Succeeded)
             {
-                var result = await signInManager.PasswordSignInAsync(user, input.Password, input.RememberMe, lockoutOnFailure: true);
-                if (result.Succeeded)
+                return Results.Redirect(returnUrl);
+            }
+
+            var failMessage = InvalidCredentialsError;
+            if (result.IsLockedOut)
+            {
+                failMessage = "This account has been locked out, please try again later.";
+            }
+
+            var finalEncodedError = WebUtility.UrlEncode(failMessage);
+            return Results.Redirect($"/account/login?error={finalEncodedError}&returnUrl={returnUrl}");
+        });
+
+        app.MapPost("/account/handle-member-login", async (
+             HttpContext httpContext,
+             [FromQuery] string? returnUrl,
+             SignInManager<ApplicationUser> signInManager,
+             UserManager<ApplicationUser> userManager,
+             IIdentityServerInteractionService interaction,
+             ApplicationDbContext dbContext,
+             ConfigurationDbContext configDbContext) =>
+        {
+            returnUrl ??= "/";
+
+            var form = await httpContext.Request.ReadFormAsync();
+            var input = new LoginInputModel
+            {
+                EmailOrUsername = form["EmailOrUsername"].ToString(),
+                Password = form["Password"],
+                RememberMe = form["RememberMe"].Contains("true"),
+                GraphicalPasswordFile = form.Files.GetFile("GraphicalPasswordFile")
+            };
+
+            var validationResults = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(input, new ValidationContext(input), validationResults, true))
+            {
+                var error = WebUtility.UrlEncode(string.Join(" ", validationResults.Select(v => v.ErrorMessage)));
+                return Results.Redirect($"/account/login?error={error}&returnUrl={returnUrl}");
+            }
+
+            var user = await userManager.FindByNameAsync(input.EmailOrUsername) ?? await userManager.FindByEmailAsync(input.EmailOrUsername);
+            if (user == null)
+            {
+                var error = WebUtility.UrlEncode(InvalidCredentialsError);
+                return Results.Redirect($"/account/login?error={error}&returnUrl={returnUrl}");
+            }
+
+            // OIDC Flow
+            var context = await interaction.GetAuthorizationContextAsync(returnUrl);
+            if (context == null)
+            {
+                var error = WebUtility.UrlEncode("Invalid login request. Authorization context not found.");
+                return Results.Redirect($"/account/login?error={error}&returnUrl={returnUrl}");
+            }
+
+            var client = await configDbContext.Clients
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ClientId == context.Client.ClientId);
+
+            if (client == null)
+            {
+                var error = WebUtility.UrlEncode("Client application is not configured correctly.");
+                return Results.Redirect($"/account/login?error={error}&returnUrl={returnUrl}");
+            }
+            var clientDbId = client.Id;
+
+            // Check permissions user for client
+            var hasUserPermission = await dbContext.UserClientPermissions.AnyAsync(p => p.UserId == user.Id && p.ClientId == clientDbId);
+            if (!hasUserPermission)
+            {
+                var hasOrgPermission = await dbContext.OrganizationClientPermissions
+                    .AnyAsync(p => p.ClientId == clientDbId &&
+                        dbContext.UserOrganizationRoles.Any(r => r.UserId == user.Id && r.OrganizationId == p.OrganizationId));
+
+                if (!hasOrgPermission)
                 {
-                    return Results.Redirect(returnUrl);
+                    var error = WebUtility.UrlEncode("You do not have permission to access this application.");
+                    return Results.Redirect($"/account/login?error={error}&returnUrl={returnUrl}");
                 }
             }
 
-            var failMessage = "Invalid email/username or password.";
-            encodedError = WebUtility.UrlEncode(failMessage);
-            return Results.Redirect($"/account/login?error={encodedError}&returnUrl={returnUrl}");
+            Microsoft.AspNetCore.Identity.SignInResult result;
+            string passwordToCheck = input.Password ?? string.Empty;
+
+            if (input.GraphicalPasswordFile is not null)
+            {
+                if (string.IsNullOrEmpty(user.GraphicalPasswordKey))
+                {
+                    var error = WebUtility.UrlEncode("Graphical login is not set up for this user.");
+                    return Results.Redirect($"/account/login?error={error}&returnUrl={returnUrl}");
+                }
+                try
+                {
+                    await using var imageStream = input.GraphicalPasswordFile.OpenReadStream();
+                    using var image = await Image.LoadAsync<Rgba32>(imageStream);
+                    passwordToCheck = ImageSteganographyUtility.ExtractText(image, user.GraphicalPasswordKey);
+                }
+                catch (InvalidOperationException)
+                {
+                    // This is a technical error (e.g., bad file format), not a failed login attempt.
+                    var error = WebUtility.UrlEncode("The provided file is invalid or corrupted.");
+                    return Results.Redirect($"/account/login?error={error}&returnUrl={returnUrl}");
+                }
+                catch (CryptographicException)
+                {
+                    await userManager.AccessFailedAsync(user);
+                    var error = WebUtility.UrlEncode(InvalidCredentialsError);
+                    return Results.Redirect($"/account/login?error={error}&returnUrl={returnUrl}");
+                }
+            }
+
+            result = await signInManager.PasswordSignInAsync(user, passwordToCheck, input.RememberMe, lockoutOnFailure: true);
+
+            if (result.Succeeded)
+            {
+                var isUser = new IdentityServerUser(user.Id.ToString())
+                {
+                    DisplayName = user.DisplayName
+                };
+                await httpContext.SignInAsync(isUser, new AuthenticationProperties { IsPersistent = input.RememberMe });
+                return Results.Redirect(returnUrl);
+            }
+
+            var failMessage = InvalidCredentialsError;
+            if (result.IsLockedOut)
+            {
+                failMessage = "This account has been locked out, please try again later.";
+            }
+
+            var finalError = WebUtility.UrlEncode(failMessage);
+            return Results.Redirect($"/account/login?error={finalError}&returnUrl={returnUrl}");
         });
 
         app.MapPost("/account/validate-user-step", async (

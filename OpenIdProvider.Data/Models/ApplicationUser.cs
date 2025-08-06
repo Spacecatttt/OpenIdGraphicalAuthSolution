@@ -10,9 +10,8 @@ public class ApplicationUser : IdentityUser<Guid>
     public string DisplayName { get; set; } = string.Empty;
     public string? AvatarUrl { get; set; }
     // Custom properties for graphical authentication
-    public string? GraphicalPasswordHash { get; set; }
+    public string? GraphicalPasswordKey { get; set; }
     public string? GraphicalAuthMethodType { get; set; } // e.g., "ImageSequence", "ClickPattern"
-    public string? GraphicalAuthMetadata { get; set; }   // e.g., JSON storing image IDs or pattern data
 
     [MaxLength(100)]
     public string? Country { get; set; }
