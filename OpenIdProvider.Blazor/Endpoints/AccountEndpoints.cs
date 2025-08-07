@@ -32,7 +32,10 @@ public static class AccountEndpoints
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager) =>
         {
-            returnUrl ??= "/";
+            if (string.IsNullOrEmpty(returnUrl))
+            {
+                returnUrl = "/";
+            }
 
             var form = await httpContext.Request.ReadFormAsync();
             var input = new LoginInputModel
@@ -123,7 +126,10 @@ public static class AccountEndpoints
              ApplicationDbContext dbContext,
              ConfigurationDbContext configDbContext) =>
         {
-            returnUrl ??= "/";
+            if (string.IsNullOrEmpty(returnUrl))
+            {
+                returnUrl = "/";
+            }
 
             var form = await httpContext.Request.ReadFormAsync();
             var input = new LoginInputModel

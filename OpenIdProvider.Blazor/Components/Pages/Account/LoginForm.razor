@@ -106,9 +106,26 @@
     private void OnFileSelection(InputFileChangeEventArgs e)
     {
         var file = e.GetMultipleFiles(1).FirstOrDefault();
+        selectedFileName = null;
+        Input.GraphicalPasswordFile = null;
+
+        if (file == null)
+        {
+            return;
+        }
+
+        const long maxFileSize = 20 * 1024 * 1024; // 20 MB limit on the client
+
+        if (file.Size > maxFileSize)
+        {
+            ErrorMessage = $"Error: File size cannot exceed {maxFileSize / 1024 / 1024} MB.";
+            return;
+        }
+
         Input.GraphicalPasswordFile = file;
-        selectedFileName = file?.Name;
+        selectedFileName = file.Name;
         isDragOver = false;
+        ErrorMessage = null;
     }
 
     private void HandleDragEnter() => isDragOver = true;
