@@ -57,10 +57,8 @@ public static class AccountEndpoints
                 return Results.Redirect($"/account/login?error={encodedError}&returnUrl={returnUrl}");
             }
 
-            var user = await (input.EmailOrUsername.Contains('@')
-                ? userManager.FindByEmailAsync(input.EmailOrUsername)
-                : userManager.FindByNameAsync(input.EmailOrUsername));
-
+            var user = await userManager.FindByNameAsync(input.EmailOrUsername) ??
+                       await userManager.FindByEmailAsync(input.EmailOrUsername);
             if (user == null)
             {
                 encodedError = WebUtility.UrlEncode(InvalidCredentialsError);

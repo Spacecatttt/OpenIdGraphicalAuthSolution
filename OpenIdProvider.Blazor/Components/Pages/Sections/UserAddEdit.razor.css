@@ -147,8 +147,6 @@
 
 
 /* Validation & Feedback  */
-
-/* A general error message block */
 .error-message {
     background-color: var(--bg-color);
     color: #ef4444;
@@ -160,20 +158,16 @@
     text-align: center;
 }
 
-/* Inline validation message for a specific field */
-.validation-message {
-    color: #ef4444;
-    font-size: 0.875rem;
-    margin-top: 0.25rem;
+::deep .validation-message {
+    color: #d63442;
+    font-weight: normal;
 }
 
-/* Styles applied to an input's container when it's invalid */
 .invalid .form-input,
 .invalid .form-textarea {
     border-color: #ef4444;
 }
 
-/* Red asterisk for marking required fields */
 .required-asterisk {
     color: #ef4444;
     margin-left: 0.25rem;
@@ -182,7 +176,7 @@
 
 /* Specific Components  */
 
-/* --- Password Input with Toggle --- */
+/* Password Input with Toggle */
 
 .password-input-wrapper {
     position: relative;
@@ -222,7 +216,7 @@
 }
 
 
-/* --- Selected Items / Tags Display --- */
+/* Selected Items / Tags Display */
 
 .selected-items-container {
     display: flex;
@@ -270,7 +264,7 @@
 }
 
 
-/* --- Multi-Select Dropdown Component --- */
+/* Multi-Select Dropdown Component */
 
 .multi-select-wrapper {
     position: relative;
@@ -331,6 +325,64 @@
     cursor: not-allowed;
 }
 
+/* Graphic password  */
+.file-drop-zone {
+    position: relative;
+    width: 100%;
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dotted var(--border-color);
+    border-radius: 0.5rem;
+    background-color: var(--bg-color);
+    transition: background-color 0.2s, border-color 0.2s;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.file-drop-zone:hover {
+    background-color: var(--secondary-bg);
+    border-color: #6c757d;
+}
+
+.file-drop-zone-text {
+    color: var(--text-primary);
+    font-weight: 500;
+    text-align: center;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+::deep .file-drop-zone-input-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+}
+
+.result-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 900px;
+}
+
+.result-image {
+    width: 100%;
+    max-width: 650px;
+    height: auto;
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.result-container .btn {
+    align-self: flex-end;
+    margin-top: 1rem;
+    width: 250px;
+    text-align: center;
+}
 
 /* Theme Overrides  */
 

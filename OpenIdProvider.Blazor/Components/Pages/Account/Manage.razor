@@ -293,6 +293,7 @@ else
     private AuthMethod selectedAuthMethod = AuthMethod.Password;
     private GraphicalPasswordViewModel graphicalPasswordModel = new();
     private string? graphicalPasswordStatusMessage;
+    const long maxFileSize = 10 * 1024 * 1024; // 10 MB
 
     // --- Group Selection State ---
     private bool isGroupDropdownOpen = false;
@@ -569,7 +570,7 @@ else
             var key = HelperService.GenerateRandomString(32);
 
             await using var imageStream = new MemoryStream();
-            await graphicalPasswordModel.BaseImageFile.OpenReadStream(10 * 1024 * 1024).CopyToAsync(imageStream);
+            await graphicalPasswordModel.BaseImageFile.OpenReadStream(maxFileSize).CopyToAsync(imageStream);
             imageStream.Position = 0;
             using var originalImage = Image.Load<Rgba32>(imageStream);
             using var stegoImage = ImageSteganographyUtility.EmbedText(originalImage, password, key);
@@ -641,7 +642,6 @@ else
             return;
         }
 
-        const long maxFileSize = 10 * 1024 * 1024; // 10 MB
         if (file.ContentType != "image/png")
         {
             graphicalPasswordStatusMessage = "Error: Only .png files are allowed.";
