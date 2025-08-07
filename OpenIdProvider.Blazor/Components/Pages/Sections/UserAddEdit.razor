@@ -12,6 +12,10 @@
 @using OpenIdProvider.Data.Models
 @using OpenIdProvider.Blazor.Services
 
+@using SixLabors.ImageSharp
+@using SixLabors.ImageSharp.PixelFormats
+@using SixLabors.ImageSharp.Formats.Png
+
 @inject ILogger<UserAddEdit> Logger
 @inject IDbContextFactory<ApplicationDbContext> DbContextFactory
 @inject IDbContextFactory<Duende.IdentityServer.EntityFramework.DbContexts.ConfigurationDbContext> ConfigurationDbContextFactory
@@ -86,40 +90,88 @@ else
                     </InputSelect>
                 </div>
 
+                @if (userModel.AuthType == AuthMethod.Password)
+                {
+                    @if(IsNew)
+                    {
+                        <div class="form-group">
+                            <label for="password">Password<span class="required-asterisk">*</span></label>
+                            <div class="password-input-wrapper">
+                                <InputText id="password" @bind-Value="userModel.Password" type="@passwordFieldType" class="form-input"/>
+                                <div class="password-buttons">
+                                    <button type="button" class="password-btn" title="Generate Password"
+                                        @onclick="() => userModel.Password = HelperService.GeneratePassword(16)">
+                                        <img src="/images/security/generate_password.png" alt="Generate" />
+                                    </button>
+
+                                    <button type="button" class="password-btn" @onclick="TogglePasswordVisibility">
+                                        <img src="@(passwordFieldType == "password" ?
+                                            "/images/security/eye_show.png" :
+                                            "/images/security/eye_hide.png")" alt="Show/Hide" />
+                                    </button>
+                                </div>
+                            </div>
+                            <ValidationMessage For="@(() => userModel.Password)" />
+                        </div>
+                    }
+                    else
+                    {
+                        <h2 class="form-section-header">Change Password</h2>
+                        <div class="form-group">
+                            <label for="newPassword">New Password (optional)</label>
+                            <div class="password-input-wrapper">
+                                <InputText id="newPassword" @bind-Value="userModel.NewPassword" type="@passwordFieldType" class="form-input" />
+                                <div class="password-buttons">
+                                    <button type="button" class="password-btn" title="Generate Password" @onclick="() => userModel.NewPassword = HelperService.GeneratePassword(16)">
+                                        <img src="/images/security/generate_password.png" alt="Generate" />
+                                    </button>
+                                    <button type="button" class="password-btn" @onclick="TogglePasswordVisibility">
+                                        <img src="@(passwordFieldType == "password" ? "/images/security/eye_show.png" : "/images/security/eye_hide.png")" alt="Show/Hide" />
+                                    </button>
+                                </div>
+                            </div>
+                            <ValidationMessage For="@(() => userModel.NewPassword)" />
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmPassword">Confirm New Password</label>
+                             <div class="password-input-wrapper">
+                                <InputText id="confirmPassword" @bind-Value="userModel.ConfirmPassword" type="@passwordFieldType" class="form-input" />
+                            </div>
+                            <ValidationMessage For="@(() => userModel.ConfirmPassword)" />
+                        </div>
+                    }
+
+                }
+
                 @if (userModel.AuthType == AuthMethod.Graphical)
                 {
                     <div class="form-group">
-                        @* // TODO: use enum for Graphical Method *@
-                        <label for="graphicalAuthType">Graphical Method</label>
-                        <InputSelect TValue="string" @bind-Value="userModel.GraphicalAuthType" class="form-input">
-                            <option value="ImageSequence">Image Sequence</option>
-                            <option value="ClickPattern">Click Pattern</option>
-                        </InputSelect>
-                    </div>
-                }
-
-                @if (IsNew && userModel.AuthType == AuthMethod.Password)
-                {
-                    <div class="form-group">
-                        <label for="password">Password<span class="required-asterisk">*</span></label>
-                        <div class="password-input-wrapper">
-                            <InputText id="password" @bind-Value="userModel.Password" type="@passwordFieldType"
-                                class="form-input" />
-                            <div class="password-buttons">
-                                <button type="button" class="password-btn" title="Generate Password"
-                                    @onclick="() => userModel.Password = HelperService.GeneratePassword(16)">
-                                    <img src="/images/security/generate_password.png" alt="Generate" />
-                                </button>
-                                <button type="button" class="password-btn" @onclick="TogglePasswordVisibility"
-                                    title="Show/Hide Password">
-                                    <img src="@(passwordFieldType == "password" ?
-                                                                                         "/images/security/eye_show.png" :
-                                                                                         "/images/security/eye_hide.png")" alt="Show/Hide" />
-                                </button>
-                            </div>
+                        <p class="upload-instruction">Please upload a .png image that will be used as the user's graphical password.</p>
+                        <div class="file-drop-zone">
+                            <InputFile OnChange="HandleGraphicalFileSelected" accept=".png" class="file-drop-zone-input-overlay" />
+                            <span class="file-drop-zone-text">
+                                @if (!string.IsNullOrEmpty(graphicalPasswordStatusMessage)) { @graphicalPasswordStatusMessage; }
+                                else { @("Select or drop file here"); }
+                            </span>
                         </div>
-                        <ValidationMessage For="@(() => userModel.Password)" />
                     </div>
+                    <div class="form-group">
+                        <button type="button" class="btn btn-primary" @onclick="HandleEmbedGraphicalPassword" disabled="@(graphicalPasswordModel.BaseImageFile == null)">
+                            Generate & Embed Secure Password
+                        </button>
+                    </div>
+                    @if (!string.IsNullOrEmpty(graphicalPasswordModel.ResultImageDataUrl))
+                    {
+                        <div class="result-container mt-3">
+                            <p><strong>Success!</strong> Provide this image to the user. They will need it to log in.</p>
+                            <img src="@graphicalPasswordModel.ResultImageDataUrl"
+                                class="result-image" alt="Image with embedded secret" />
+                            <a href="@graphicalPasswordModel.ResultImageDataUrl" download="@downloadFileName"
+                                class="btn btn-primary d-block mt-2">
+                                Download Image
+                            </a>
+                        </div>
+                    }
                 }
 
                 <h2 class="form-section-header">Additional Information</h2>
@@ -225,7 +277,10 @@ else
                 <div class="error-message">@errorMessage</div>
             }
             <div class="form-footer">
-                <button type="submit" class="btn btn-primary">@(IsNew ? "Add User" : "Save Changes")</button>
+                <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                    @if(isSaving) { <span class="spinner-border spinner-border-sm"></span>; }
+                    else { @(IsNew ? "Add User" : "Save Changes"); }
+                </button>
                 <button type="button" class="btn btn-secondary" @onclick="NavigateBack">Cancel</button>
             </div>
         </EditForm>
@@ -235,13 +290,21 @@ else
     #region Parameters & State
     [Parameter]
     public Guid? UserId { get; set; }
-
-    private UserViewModel userModel = new();
-    private bool isLoading = true;
     private bool IsNew => UserId == null;
+
+    //
+    private bool isLoading = true;
+    private bool isSaving;
     private string? errorMessage;
-    private string passwordFieldType = "password";
+    private UserViewModel userModel = new();
     private bool CanManageUsers => AppState.CurrentUserRoleInSelectedOrg >= OrganizationRole.Admin;
+    private string passwordFieldType = "password";
+
+    // State for graphical password
+    private GraphicalPasswordViewModel graphicalPasswordModel = new();
+    private string? graphicalPasswordStatusMessage;
+    const long maxFileSize = 10 * 1024 * 1024; // 10 MB
+    private string downloadFileName => $"{userModel.UserName}-password.png";
 
     // Data for dropdowns
     private List<Group> allGroupsInOrg = new();
@@ -318,8 +381,7 @@ else
                     Location = user.Location,
                     Address = user.Address,
                     Bio = user.Bio,
-                    AuthType = string.IsNullOrEmpty(user.GraphicalAuthMethodType) ? AuthMethod.Password : AuthMethod.Graphical,
-                    GraphicalAuthType = user.GraphicalAuthMethodType
+                    AuthType = string.IsNullOrEmpty(user.GraphicalAuthMethodType) ? AuthMethod.Password : AuthMethod.Graphical
                 };
             }
             else { errorMessage = "User not found in the selected organization."; }
@@ -357,26 +419,36 @@ else
     {
         if (AppState.SelectedOrganization == null) { errorMessage = "An organization must be selected."; return; }
         errorMessage = null;
+        isSaving = true;
 
-        if (IsNew && string.IsNullOrWhiteSpace(userModel.Password))
+        if (IsNew && userModel.AuthType == AuthMethod.Password && string.IsNullOrWhiteSpace(userModel.Password))
         {
-            errorMessage = "Password is required for a new user.";
+            errorMessage = "Password is required for a new user with password authentication.";
+            isSaving = false;
+            return;
+        }
+        if (IsNew && userModel.AuthType == AuthMethod.Graphical && string.IsNullOrWhiteSpace(userModel.GraphicalPasswordKey))
+        {
+            errorMessage = "A graphical password must be set up before creating the user.";
+            isSaving = false;
             return;
         }
 
         if (AppState.CurrentUserRoleInSelectedOrg < OrganizationRole.Admin && userModel.Role == OrganizationRole.Owner)
         {
             errorMessage = "You cannot assign the Owner role.";
+            isSaving = false;
             return;
         }
+
+        await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
 
         try
         {
             if (IsNew)
             {
-                await using var dbContext = await DbContextFactory.CreateDbContextAsync();
                 Guid? primaryOrgId = null;
-
                 if (userModel.Role >= OrganizationRole.Viewer)
                 {
                     // Create a personal organization for the new user
@@ -404,110 +476,108 @@ else
                     Location = userModel.Location,
                     Address = userModel.Address,
                     Bio = userModel.Bio,
-                    GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ? userModel.GraphicalAuthType : null,
+                    GraphicalPasswordKey = userModel.GraphicalPasswordKey,
+                    GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ? "ImageSteganography" : null,
                     PrimaryOrganizationId = primaryOrgId
                 };
                 var result = await UserManager.CreateAsync(newUser, userModel.Password);
 
-                if (result.Succeeded)
+                if (!result.Succeeded)
                 {
-                    var userRole = new UserOrganizationRole
+                    throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
+                }
+
+                dbContext.UserOrganizationRoles.Add(new UserOrganizationRole
                     {
                         UserId = newUser.Id,
                         OrganizationId = AppState.SelectedOrganization.Id,
                         Role = userModel.Role
-                    };
-                    dbContext.UserOrganizationRoles.Add(userRole);
-
-                    var userToUpdate = await dbContext.Users.FindAsync(newUser.Id);
-                    if (userToUpdate != null)
-                    {
-                        // Assign groups
-                        var selectedGroups = dbContext.Groups.Where(g => userModel.SelectedGroupIds.Contains(g.Id)).ToList();
-                        foreach (var group in selectedGroups)
-                        {
-                            userToUpdate.Groups.Add(group);
-                        }
-
-                        // Assign clients
-                        foreach(var clientId in userModel.SelectedClientIds)
-                        {
-                            dbContext.UserClientPermissions.Add(
-                                new UserClientPermission
-                                {
-                                    UserId = newUser.Id,
-                                    ClientId = clientId
-                                }
-                            );
-                        }
                     }
-                    await dbContext.SaveChangesAsync();
-                    NavigateBack();
-                }
-                else
+                );
+
+                // Assign groups
+                var selectedGroups = await dbContext.Groups.Where(g => userModel.SelectedGroupIds.Contains(g.Id)).ToListAsync();
+                foreach (var group in selectedGroups)
                 {
-                    errorMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+                    newUser.Groups.Add(group);
+                }
+                // Assign clients
+                foreach(var clientId in userModel.SelectedClientIds)
+                {
+                    newUser.AllowedClientPermissions.Add(new UserClientPermission { ClientId = clientId });
                 }
             }
             else
             {
-                await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+                // Firstly update password
+                if (!string.IsNullOrWhiteSpace(userModel.NewPassword))
+                {
+                    var userForPasswordReset = await UserManager.FindByIdAsync(UserId.ToString()!);
+
+                    if (userForPasswordReset == null)
+                        throw new Exception("Could not find the user to update password.");
+
+                    var token = await UserManager.GeneratePasswordResetTokenAsync(userForPasswordReset);
+                    var result = await UserManager.ResetPasswordAsync(userForPasswordReset, token, userModel.NewPassword);
+                    if (!result.Succeeded)
+                    {
+                        throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
+                    }
+                }
 
                 var userToUpdate = await dbContext.Users
-                    .Include(u => u.Groups)
-                    .Include(u => u.AllowedClientPermissions)
-                    .FirstOrDefaultAsync(u => u.Id == UserId);
+                        .Include(u => u.Groups)
+                        .Include(u => u.AllowedClientPermissions)
+                        .FirstOrDefaultAsync(u => u.Id == UserId);
 
                 var userRoleToUpdate = await dbContext.UserOrganizationRoles
                     .FirstOrDefaultAsync(uor => uor.UserId == UserId &&
                                                 uor.OrganizationId == AppState.SelectedOrganization.Id);
 
-                if (userToUpdate != null && userRoleToUpdate != null)
+                if (userToUpdate == null || userRoleToUpdate == null)
                 {
-                    userRoleToUpdate.User.DisplayName = userModel.DisplayName;
-                    userRoleToUpdate.User.UserName = userModel.UserName;
-                    userRoleToUpdate.User.AvatarUrl = userModel.AvatarUrl;
-                    userRoleToUpdate.Role = userModel.Role;
-                    userRoleToUpdate.User.Country = userModel.Country;
-                    userRoleToUpdate.User.Location = userModel.Location;
-                    userRoleToUpdate.User.Address = userModel.Address;
-                    userRoleToUpdate.User.Bio = userModel.Bio;
-                    userRoleToUpdate.User.GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ?
-                                                                    userModel.GraphicalAuthType
-                                                                    : null;
-
-                    // Groups
-                    userRoleToUpdate.User.Groups.Clear();
-                    var selectedGroups = dbContext.Groups.Where(g => userModel.SelectedGroupIds.Contains(g.Id)).ToList();
-                    foreach (var group in selectedGroups)
-                    {
-                        userRoleToUpdate.User.Groups.Add(group);
-                    }
-
-                    // Clients
-                    dbContext.UserClientPermissions.RemoveRange(userToUpdate.AllowedClientPermissions);
-                    foreach(var clientId in userModel.SelectedClientIds)
-                    {
-                        userToUpdate.AllowedClientPermissions.Add(new UserClientPermission { ClientId = clientId });
-                    }
-
-                    await dbContext.SaveChangesAsync();
-                    NavigateBack();
+                    throw new Exception("Could not find the user to update.");
                 }
-                else {
-                    errorMessage = "Could not find the user to update.";
-                }
+
+                userToUpdate.DisplayName = userModel.DisplayName;
+                userToUpdate.UserName = userModel.UserName;
+                userToUpdate.AvatarUrl = userModel.AvatarUrl;
+                userToUpdate.Country = userModel.Country;
+                userToUpdate.Location = userModel.Location;
+                userToUpdate.Address = userModel.Address;
+                userToUpdate.Bio = userModel.Bio;
+                userToUpdate.GraphicalPasswordKey = userModel.GraphicalPasswordKey;
+                userToUpdate.GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ?
+                                                                "ImageSteganography"
+                                                                : null;
+                userRoleToUpdate.Role = userModel.Role;
+
+                // Groups
+                var selectedGroups = await dbContext.Groups.Where(g => userModel.SelectedGroupIds.Contains(g.Id)).ToListAsync();
+                userToUpdate.Groups.SyncCollection(selectedGroups, g => g.Id, g => g.Id, g => g);
+                // Clients
+                userToUpdate.AllowedClientPermissions.SyncCollection(
+                    userModel.SelectedClientIds,
+                    p => p.ClientId,
+                    id => id,
+                    id => new UserClientPermission { ClientId = id, UserId = userToUpdate.Id }
+                );
             }
+
+            await dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+            NavigateBack();
         }
         catch (Exception ex)
         {
+            await transaction.RollbackAsync();
             Logger.LogError(ex, "An error occurred while saving the user.");
-            errorMessage = "An error occurred while saving the user.";
+            errorMessage = $"An error occurred: {ex.Message}";
         }
-    }
-    private void TogglePasswordVisibility()
-    {
-        passwordFieldType = passwordFieldType == "password" ? "text" : "password";
+        finally
+        {
+            isSaving = false;
+        }
     }
 
     private IEnumerable<Group> GetSelectedGroups() =>
@@ -533,9 +603,94 @@ else
         isClientDropdownOpen = false;
     }
     private void RemoveClient(int clientId) => userModel.SelectedClientIds.Remove(clientId);
+
     private void NavigateBack() => NavigationManager.NavigateTo("/users");
     #endregion
 
+    #region Password Event Handlers
+    private void TogglePasswordVisibility()
+    {
+        passwordFieldType = passwordFieldType == "password" ? "text" : "password";
+    }
+    private void HandleGraphicalFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.GetMultipleFiles(1).FirstOrDefault();
+        graphicalPasswordModel.ResultImageDataUrl = null;
+
+        if (file == null)
+        {
+            graphicalPasswordStatusMessage = null;
+            graphicalPasswordModel.BaseImageFile = null;
+            return;
+        }
+
+        if (file.ContentType != "image/png")
+        {
+            graphicalPasswordStatusMessage = "Error: Only .png files are allowed.";
+            graphicalPasswordModel.BaseImageFile = null;
+        }
+        else if (file.Size > maxFileSize)
+        {
+            graphicalPasswordStatusMessage = $"Error: File size cannot exceed {maxFileSize / 1024 / 1024} MB.";
+            graphicalPasswordModel.BaseImageFile = null;
+        }
+        else
+        {
+            graphicalPasswordModel.BaseImageFile = file;
+            graphicalPasswordStatusMessage = $"File selected: {file.Name}";
+        }
+    }
+    private async Task HandleEmbedGraphicalPassword()
+    {
+        if (graphicalPasswordModel.BaseImageFile == null)
+        {
+            graphicalPasswordStatusMessage = "Please select an image first.";
+            return;
+        }
+
+        graphicalPasswordStatusMessage = "Processing...";
+        try
+        {
+            var password = HelperService.GeneratePassword(16);
+            var key = HelperService.GenerateRandomString(32);
+
+            await using var imageStream = new MemoryStream();
+            await graphicalPasswordModel.BaseImageFile.OpenReadStream(maxFileSize).CopyToAsync(imageStream);
+            imageStream.Position = 0;
+            using var originalImage = Image.Load<Rgba32>(imageStream);
+            using var stegoImage = ImageSteganographyUtility.EmbedText(originalImage, password, key);
+
+            // Store credentials in the main view model to be saved with the user
+            if (IsNew)
+            {
+                userModel.Password = password;
+            }
+            else
+            {
+                userModel.NewPassword = password;
+                userModel.ConfirmPassword = password;
+            }
+            userModel.GraphicalPasswordKey = key;
+
+            await using var outputStream = new MemoryStream();
+            var encoder = new PngEncoder {
+                ColorType = PngColorType.RgbWithAlpha,
+                CompressionLevel = PngCompressionLevel.DefaultCompression
+            };
+            await stegoImage.SaveAsync(outputStream, encoder);
+            var base64 = Convert.ToBase64String(outputStream.ToArray());
+            graphicalPasswordModel.ResultImageDataUrl = $"data:image/png;base64,{base64}";
+            graphicalPasswordStatusMessage = "Graphical password ready. Save the user to apply changes.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error embedding graphical password.");
+            graphicalPasswordStatusMessage = $"Error: {ex.Message}";
+        }
+    }
+    #endregion
+
+    #region View Models
     public class UserViewModel
     {
         [Required]
@@ -546,9 +701,19 @@ else
         public string Email { get; set; } = string.Empty;
         public string? AvatarUrl { get; set; }
         public string Password { get; set; } = string.Empty;
+
+        // Empty string or a string between 6 and 100 characters long
+        [RegularExpression(@"^$|^.{6,100}$", ErrorMessage = "The password must be between 6 and 100 characters long.")]
+        [DataType(DataType.Password)]
+        public string? NewPassword { get; set; }
+
+        [DataType(DataType.Password)]
+        [Compare("NewPassword", ErrorMessage = "The new password and confirmation password do not match.")]
+        public string? ConfirmPassword { get; set; }
+
+        public string? GraphicalPasswordKey { get; set; }
         public OrganizationRole Role { get; set; } = OrganizationRole.Viewer;
         public AuthMethod AuthType { get; set; } = AuthMethod.Password;
-        public string? GraphicalAuthType { get; set; } = "ImageSequence";
         public string? Country { get; set; }
         public string? Location { get; set; }
         public string? Address { get; set; }
@@ -556,4 +721,10 @@ else
         public List<Guid> SelectedGroupIds { get; set; } = new();
         public List<int> SelectedClientIds { get; set; } = new();
     }
+    public class GraphicalPasswordViewModel
+    {
+        public IBrowserFile? BaseImageFile { get; set; }
+        public string? ResultImageDataUrl { get; set; }
+    }
+    #endregion
 }

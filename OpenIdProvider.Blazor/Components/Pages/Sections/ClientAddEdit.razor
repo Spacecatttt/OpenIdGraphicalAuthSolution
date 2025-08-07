@@ -226,18 +226,13 @@ else
                                 {
                                     <li @onclick="() => SelectScope(scope)">@scope</li>
                                 }
-
-                                <li class="multi-select-custom-add">
-                                    <div class="add-item-form" @onclick:stopPropagation>
-                                        <input @bind="newCustomScope"
-                                               placeholder="Enter custom scope..."
-                                               class="form-input" />
-                                        <button type="button" class="btn btn-secondary" @onclick="AddCustomScope">Add</button>
-                                    </div>
-                                </li>
                             </ul>
                         }
                     </div>
+                </div>
+                <div class="form-group-checkbox">
+                    <InputCheckbox id="allowOfflineAccess" @bind-Value="clientModel.AllowOfflineAccess" />
+                    <label for="allowOfflineAccess">Allow Offline Access (enable Refresh Tokens)</label>
                 </div>
                 <hr/>
 
@@ -305,8 +300,7 @@ else
     private List<string> availableGrantTypes => allGrantTypes.Except(clientModel.AllowedGrantTypes).ToList();
 
     private bool isScopeDropdownOpen = false;
-    private string newCustomScope = string.Empty;
-    private List<string> standardScopes = new() { "openid", "profile", "email", "offline_access" };
+    private List<string> standardScopes = new() { "openid", "profile", "email"};
     private List<string> availableStandardScopes => standardScopes.Except(clientModel.AllowedScopes).ToList();
     #endregion
 
@@ -324,7 +318,7 @@ else
             clientModel = new ClientViewModel
             {
                 ClientIdString = HelperService.GenerateRandomString(24),
-                AllowedGrantTypes = new List<string> { GrantType.ClientCredentials },
+                AllowedGrantTypes = new List<string> { GrantType.ClientCredentials, GrantType.AuthorizationCode },
                 AllowedScopes = new () { "openid" },
                 ClientSecrets = new() { new SecretViewModel
                 {
@@ -421,22 +415,23 @@ else
                     ProtocolType = "oidc",
                     RequireClientSecret = true,
                     RequirePkce = true,
+                    AllowOfflineAccess = clientModel.AllowOfflineAccess,
                     AllowedGrantTypes = clientModel.AllowedGrantTypes
-                                                   .Select(gt => new ClientGrantType { GrantType = gt })
-                                                   .ToList(),
+                        .Select(gt => new ClientGrantType { GrantType = gt })
+                        .ToList(),
                     AllowedScopes = clientModel.AllowedScopes
-                                                .Select(s => new ClientScope { Scope = s })
-                                                .ToList(),
+                        .Select(s => new ClientScope { Scope = s })
+                        .ToList(),
                     ClientSecrets = clientModel.ClientSecrets
-                                               .Select(s => new ClientSecret
-                                                {
-                                                    Value = s.Value.Sha256(), //hash
-                                                    Description = s.Description
-                                                })
-                                                .ToList(),
+                        .Select(s => new ClientSecret
+                         {
+                             Value = s.Value.Sha256(), //hash
+                             Description = s.Description
+                         })
+                        .ToList(),
                     RedirectUris = clientModel.RedirectUris
-                                              .Select(uri => new ClientRedirectUri { RedirectUri = uri })
-                                              .ToList(),
+                        .Select(uri => new ClientRedirectUri { RedirectUri = uri })
+                        .ToList(),
                     FrontChannelLogoutUri = clientModel.FrontChannelLogoutUri,
                     BackChannelLogoutUri = clientModel.BackChannelLogoutUri,
                     AccessTokenLifetime = clientModel.AccessTokenLifetime,
@@ -480,6 +475,7 @@ else
                     clientToUpdate.ClientUri = clientModel.ClientUri;
                     clientToUpdate.LogoUri = clientModel.LogoUri;
                     clientToUpdate.Enabled = clientModel.Enabled;
+                    clientToUpdate.AllowOfflineAccess = clientModel.AllowOfflineAccess;
 
                     // Synchronize collections
                     clientToUpdate.AllowedGrantTypes.SyncCollection(
@@ -580,15 +576,6 @@ else
         }
         isScopeDropdownOpen = false;
     }
-    private void AddCustomScope()
-    {
-        if (!string.IsNullOrWhiteSpace(newCustomScope) && !clientModel.AllowedScopes.Contains(newCustomScope))
-        {
-            clientModel.AllowedScopes.Add(newCustomScope);
-            newCustomScope = string.Empty;
-        }
-        isScopeDropdownOpen = false;
-    }
     private void NavigateBack() => NavigationManager.NavigateTo("/clients");
     #endregion
 
@@ -611,6 +598,7 @@ else
         public string? BackChannelLogoutUri { get; set; }
         public int AccessTokenLifetime { get; set; }
         public int RefreshTokenExpiration { get; set; }
+        public bool AllowOfflineAccess { get; set; }
         public bool AlwaysIncludeUserClaimsInIdToken { get; set; }
         public bool IncludeJwtId { get; set; }
         public bool EnableSignup { get; set; }

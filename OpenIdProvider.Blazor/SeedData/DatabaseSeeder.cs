@@ -1,11 +1,14 @@
 using Bogus;
 using Duende.IdentityServer.EntityFramework.DbContexts;
 using Duende.IdentityServer.EntityFramework.Entities;
+using Duende.IdentityServer.EntityFramework.Mappers;
+using Duende.IdentityServer.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
 using ClientEntity = Duende.IdentityServer.EntityFramework.Entities.Client;
+using IdentityResource = Duende.IdentityServer.Models.IdentityResource;
 
 namespace OpenIdProvider.Blazor.Services;
 
@@ -16,6 +19,7 @@ public class DatabaseSeeder
 {
     private readonly ApplicationDbContext _appDbContext;
     private readonly ConfigurationDbContext _configDbContext;
+    private readonly PersistedGrantDbContext _grantContext;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<DatabaseSeeder> _logger;
     private const string Password = "Password123!";
@@ -23,11 +27,13 @@ public class DatabaseSeeder
     public DatabaseSeeder(
         ApplicationDbContext appDbContext,
         ConfigurationDbContext configDbContext,
+        PersistedGrantDbContext grantContext,
         UserManager<ApplicationUser> userManager,
         ILogger<DatabaseSeeder> logger)
     {
         _appDbContext = appDbContext;
         _configDbContext = configDbContext;
+        _grantContext = grantContext;
         _userManager = userManager;
         _logger = logger;
     }
@@ -44,6 +50,25 @@ public class DatabaseSeeder
             await _appDbContext.Database.EnsureDeletedAsync();
             await _appDbContext.Database.MigrateAsync();
             await _configDbContext.Database.MigrateAsync();
+            await _grantContext.Database.MigrateAsync();
+
+            // Need to add standard scopes
+            var identityResources = new List<IdentityResource> // Use the Model class here
+            {
+                new IdentityResources.OpenId(),
+                new IdentityResources.Profile(),
+                new IdentityResources.Email(),
+                new IdentityResources.Phone(),
+                new IdentityResources.Address(),
+            };
+
+            // Convert each Model to an Entity before adding to the database
+            foreach (var resource in identityResources)
+            {
+                await _configDbContext.IdentityResources.AddAsync(resource.ToEntity());
+            }
+
+            await _configDbContext.SaveChangesAsync();
         }
         else if (await _appDbContext.Users.AnyAsync())
         {

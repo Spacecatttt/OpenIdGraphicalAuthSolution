@@ -3,126 +3,35 @@
 @attribute [AllowAnonymous]
 
 @using System.ComponentModel.DataAnnotations
-@using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Identity
 @using OpenIdProvider.Data.Models
 @using Microsoft.AspNetCore.Components.Forms
-@using Microsoft.AspNetCore.Components
-@using OpenIdProvider.Blazor.Components.Account
+@using Duende.IdentityServer.Services
 
-@inject SignInManager<ApplicationUser> SignInManager
-@inject UserManager<ApplicationUser> UserManager
-@inject ILogger<Login> Logger
-@inject IdentityRedirectManager RedirectManager
+@inject IIdentityServerInteractionService Interaction
 
-
-<PageTitle>Log in</PageTitle>
-
-
-
-<div class="container-1">
-    <div class="container-2">
-        <h3>Log In</h3>
-        <section>
-            <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
-                <DataAnnotationsValidator />
-                <hr />
-                @if (!string.IsNullOrEmpty(errorMessage))
-                {
-                    <div class="alert alert-danger">@errorMessage</div>
-                }
-                <div class="form-floating mb-3">
-                    <InputText @bind-Value="Input.EmailOrUsername" class="form-control" autocomplete="username"
-                        aria-required="true" placeholder="Enter your email or username..." />
-                    <label for="emailOrUsername" class="form-label">Email or username</label>
-                    <ValidationMessage For="() => Input.EmailOrUsername" class="text-danger" />
-                </div>
-                <div class="form-floating mb-3">
-                    <InputText type="password" @bind-Value="Input.Password" class="form-control"
-                        autocomplete="current-password" aria-required="true" placeholder="Enter your password..." />
-                    <label for="password" class="form-label">Password</label>
-                    <ValidationMessage For="() => Input.Password" class="text-danger" />
-                </div>
-                <div class="checkbox mb-3">
-                    <label class="form-label">
-                        <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" />
-                        Remember me?
-                    </label>
-                </div>
-                <button type="submit" class="btn-success">Log In</button>
-            </EditForm>
-            <div class="container-inline">
-                <p>Don’t have an account?</p>
-                <a href="/account/register">Sign up</a>
-            </div>
-        </section>
-    </div>
-
-    <div class="container-3">
-        <image src="/images/mountainsLogIn.png"></image>
-    </div>
-</div>
+<LoginForm IsOidcFlow="@isOidcFlow" ClientId="@clientId" ReturnUrl="@ReturnUrl" ErrorMessage="@ErrorMessage" />
 
 @code {
-    private string? errorMessage;
-
-    [CascadingParameter]
-    private HttpContext HttpContext { get; set; } = default!;
-
-    [SupplyParameterFromForm]
-    private InputModel Input { get; set; } = new();
-
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
 
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? ErrorMessage { get; set; }
+
+    private bool isOidcFlow;
+    private string? clientId;
+
     protected override async Task OnInitializedAsync()
     {
-        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        if (!string.IsNullOrEmpty(ReturnUrl))
         {
-            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
-        }
-    }
-
-    public async Task LoginUser()
-    {
-        var user = await UserManager.FindByEmailAsync(Input.EmailOrUsername);
-        user ??= await UserManager.FindByNameAsync(Input.EmailOrUsername);
-
-        if (user == null)
-        {
-            errorMessage = "User with this email or username was not found.";
-        }
-        else
-        {
-            var result = await SignInManager.PasswordSignInAsync(user, Input.Password, Input.RememberMe, lockoutOnFailure: false);
-
-            if (result.Succeeded)
+            // This must be called during the initial server render because it might modify HTTP headers.
+            var context = await Interaction.GetAuthorizationContextAsync(ReturnUrl);
+            if (context != null)
             {
-                Logger.LogInformation("User logged in.");
-                RedirectManager.RedirectTo(ReturnUrl ?? "/");
-            }
-            else if (result.IsLockedOut)
-            {
-                errorMessage =  "User account locked out.";
-            }
-            else
-            {
-                await UserManager.AccessFailedAsync(user);
-                errorMessage = "Error: Invalid login attempt.";
+                isOidcFlow = true;
+                clientId = context.Client.ClientId;
             }
         }
-    }
-
-    private sealed class InputModel
-    {
-        [Required(ErrorMessage = "Email or Username is required.")]
-        public string EmailOrUsername { get; set; } = "";
-
-        [Required(ErrorMessage = "Password is required.")]
-        [MinLength(6, ErrorMessage = "Password must be at least 6 characters long.")]
-        [DataType(DataType.Password)]
-        public string Password { get; set; } = "";
-
-        public bool RememberMe { get; set; }
     }
 }

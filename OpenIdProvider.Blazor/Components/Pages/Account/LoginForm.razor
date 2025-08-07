@@ -1,0 +1,141 @@
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using OpenIdProvider.Data.Models
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net
+
+<div class="container-1">
+    <div class="container-2">
+        <h3>Log In</h3>
+        <section>
+            <form method="post" action="@formActionUrl" enctype="multipart/form-data">
+                <AntiforgeryToken />
+
+                <div class="login-method-tabs">
+                    <button type="button" class="tab-btn @(loginMethod == "password" ? "active" : "")"
+                        @onclick='() => loginMethod = "password"'>Password</button>
+                    <button type="button" class="tab-btn @(loginMethod == "graphical" ? "active" : "")"
+                        @onclick='() => loginMethod = "graphical"'>Graphical File</button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(ErrorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">@ErrorMessage</div>
+                }
+
+                <div class="form-floating mb-3">
+                    <input @bind="Input.EmailOrUsername" name="EmailOrUsername" class="form-control"
+                        autocomplete="username" aria-required="true" placeholder="Enter your email or username..." />
+                    <label for="emailOrUsername" class="form-label">Email or username</label>
+                </div>
+                @if (loginMethod == "password")
+                {
+                    <div class="form-floating mb-3">
+                        <input type="password" @bind="Input.Password" name="Password" class="form-control"
+                            autocomplete="current-password" aria-required="true" placeholder="Enter your password..." />
+                        <label for="password" class="form-label">Password</label>
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-3">
+                        <div class="file-drop-zone @dropZoneCssClass" @ondragenter="HandleDragEnter"
+                            @ondragleave="HandleDragLeave">
+                            <InputFile OnChange="OnFileSelection" class="file-drop-zone-input-overlay"
+                                name="GraphicalPasswordFile" />
+                            <span class="file-drop-zone-text">
+                                @if (string.IsNullOrEmpty(selectedFileName))
+                                {
+                                    <span>Select or drop file here</span>
+                                }
+                                else
+                                {
+                                    <span>Selected: @selectedFileName</span>
+                                }
+                            </span>
+                        </div>
+                    </div>
+                }
+
+                <div class="checkbox mb-3">
+                    <label class="form-label">
+                        <input type="checkbox" @bind="Input.RememberMe" name="RememberMe" value="true"
+                            class="form-check-input" />
+                        Remember me?
+                    </label>
+                </div>
+                <button type="submit" class="btn-success">Log In</button>
+            </form>
+            <div class="container-inline">
+                <p>Don’t have an account?</p>
+                <a href="/account/register">Sign up</a>
+            </div>
+        </section>
+    </div>
+    <div class="container-3">
+        <img src="/images/mountainsLogIn.png" alt="Decorative mountains graphic" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsOidcFlow { get; set; }
+    [Parameter] public string? ClientId { get; set; }
+    [Parameter] public string? ReturnUrl { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+
+    private string loginMethod = "password";
+    private string? selectedFileName;
+    private bool isDragOver;
+
+    private string dropZoneCssClass => isDragOver ? "file-drop-zone drag-over" : "file-drop-zone";
+
+    private InputModel Input { get; set; } = new();
+    private string formActionUrl
+    {
+        get
+        {
+            var encodedReturnUrl = WebUtility.UrlEncode(ReturnUrl);
+            return IsOidcFlow
+            ? $"/account/handle-member-login?returnUrl={encodedReturnUrl}"
+            : $"/account/handle-login?returnUrl={encodedReturnUrl}";
+        }
+    }
+    protected override void OnInitialized() { }
+
+    private void OnFileSelection(InputFileChangeEventArgs e)
+    {
+        var file = e.GetMultipleFiles(1).FirstOrDefault();
+        selectedFileName = null;
+        Input.GraphicalPasswordFile = null;
+
+        if (file == null)
+        {
+            return;
+        }
+
+        const long maxFileSize = 20 * 1024 * 1024; // 20 MB limit on the client
+
+        if (file.Size > maxFileSize)
+        {
+            ErrorMessage = $"Error: File size cannot exceed {maxFileSize / 1024 / 1024} MB.";
+            return;
+        }
+
+        Input.GraphicalPasswordFile = file;
+        selectedFileName = file.Name;
+        isDragOver = false;
+        ErrorMessage = null;
+    }
+
+    private void HandleDragEnter() => isDragOver = true;
+    private void HandleDragLeave() => isDragOver = false;
+
+    private sealed class InputModel
+    {
+        public string EmailOrUsername { get; set; } = "";
+        public string? Password { get; set; }
+        public IBrowserFile? GraphicalPasswordFile { get; set; }
+        public bool RememberMe { get; set; }
+    }
+}

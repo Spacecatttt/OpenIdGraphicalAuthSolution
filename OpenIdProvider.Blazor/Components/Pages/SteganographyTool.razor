@@ -1,0 +1,222 @@
+@page "/steganography-tool"
+@attribute [AllowAnonymous]
+@rendermode InteractiveServer
+
+@using SixLabors.ImageSharp
+@using SixLabors.ImageSharp.PixelFormats
+@using SixLabors.ImageSharp.Formats.Png
+@using System.IO
+@using System.Text
+@using System.Collections
+@using System.Security.Cryptography
+
+<PageTitle>Steganography Tool</PageTitle>
+
+<h1>Steganography Tool</h1>
+<p>Embed an encrypted secret message into an image or extract one.</p>
+
+<div class="container">
+    @* --- Section 1: Embed Secret --- *@
+    <div class="tool-section">
+        <h3>1. Embed Secret into Image</h3>
+
+        <div class="form-group">
+            <label>Select original image (.png):</label>
+            <InputFile OnChange="HandleEmbedImageSelected" accept=".png" />
+        </div>
+
+        <div class="form-group">
+            <label>Secret message to hide:</label>
+            <InputText @bind-Value="embedSecretText" class="form-control" placeholder="Your secret message..." />
+        </div>
+
+        <div class="form-group">
+            <label>Encryption Key (Password):</label>
+            <InputText @bind-Value="embedKey" class="form-control" placeholder="A key to protect your secret..." />
+        </div>
+
+        <button class="btn btn-primary" @onclick="EmbedSecret"
+            disabled="@(embedOriginalImageFile == null || string.IsNullOrWhiteSpace(embedSecretText) || string.IsNullOrWhiteSpace(embedKey))">
+            Embed Secret
+        </button>
+
+        @if (!string.IsNullOrEmpty(embedStatusMessage))
+        {
+            <p class="status-message">@embedStatusMessage</p>
+        }
+
+        @if (!string.IsNullOrEmpty(embeddedImageDataUrl))
+        {
+            <div class="result-container">
+                <h4>Result:</h4>
+                <img src="@embeddedImageDataUrl" alt="Image with embedded secret" />
+                <a href="@embeddedImageDataUrl" download="stego_image.png" class="btn btn-success">Download Image</a>
+            </div>
+        }
+    </div>
+
+    @* --- Section 2: Extract Secret --- *@
+    <div class="tool-section">
+        <h3>2. Extract Secret from Image</h3>
+
+        <div class="form-group">
+            <label>Select image with secret (.png):</label>
+            <InputFile OnChange="HandleExtractImageSelected" accept=".png" />
+        </div>
+
+        <div class="form-group">
+            <label>Decryption Key (Password):</label>
+            <InputText @bind-Value="extractKey" class="form-control" placeholder="The key used to hide the secret..." />
+        </div>
+
+        <button class="btn btn-primary" @onclick="ExtractSecret"
+            disabled="@(extractStegoImageFile == null || string.IsNullOrWhiteSpace(extractKey))">
+            Extract Secret
+        </button>
+
+        @if (!string.IsNullOrEmpty(extractStatusMessage))
+        {
+            <p class="status-message">@extractStatusMessage</p>
+        }
+
+        @if (extractedSecretText != null)
+        {
+            <div class="result-container">
+                <h4>Extracted Secret:</h4>
+                <textarea class="form-control" readonly rows="3">@extractedSecretText</textarea>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+    }
+
+    .tool-section {
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 1.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .result-container {
+        margin-top: 1.5rem;
+    }
+
+    .result-container img {
+        max-width: 100%;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+    }
+
+    .status-message {
+        font-style: italic;
+        color: #555;
+    }
+
+    .btn {
+        margin-top: 0.5rem;
+    }
+</style>
+
+
+@code {
+    // --- State for Embedding ---
+    private IBrowserFile? embedOriginalImageFile;
+    private string embedSecretText = "This message is secret and should work now!";
+    private string embedKey = "StrongPassword123";
+    private string? embeddedImageDataUrl;
+    private string? embedStatusMessage;
+
+    // --- State for Extracting ---
+    private IBrowserFile? extractStegoImageFile;
+    private string extractKey = "StrongPassword123";
+    private string? extractedSecretText;
+    private string? extractStatusMessage;
+
+    private void HandleEmbedImageSelected(InputFileChangeEventArgs e)
+    {
+        embedOriginalImageFile = e.GetMultipleFiles(1).FirstOrDefault();
+        embeddedImageDataUrl = null;
+    }
+
+    private void HandleExtractImageSelected(InputFileChangeEventArgs e)
+    {
+        extractStegoImageFile = e.GetMultipleFiles(1).FirstOrDefault();
+        extractedSecretText = null;
+    }
+
+    private async Task EmbedSecret()
+    {
+        if (embedOriginalImageFile == null) return;
+        embedStatusMessage = "Processing...";
+
+        try
+        {
+            await using var imageStream = new MemoryStream();
+            await embedOriginalImageFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(imageStream);
+            imageStream.Position = 0;
+
+            using (Image<Rgba32> originalImage = Image.Load<Rgba32>(imageStream))
+            {
+                using (Image<Rgba32> stegoImage = ImageSteganographyUtility.EmbedText(originalImage, embedSecretText, embedKey))
+                {
+                    await using var outputStream = new MemoryStream();
+
+                    var encoder = new PngEncoder
+                    {
+                        ColorType = PngColorType.RgbWithAlpha,
+                        CompressionLevel = PngCompressionLevel.NoCompression
+                    };
+                    await stegoImage.SaveAsync(outputStream, encoder);
+
+                    var base64 = Convert.ToBase64String(outputStream.ToArray());
+                    embeddedImageDataUrl = $"data:image/png;base64,{base64}";
+                    embedStatusMessage = "Secret embedded successfully!";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            embedStatusMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task ExtractSecret()
+    {
+        if (extractStegoImageFile == null) return;
+        extractStatusMessage = "Processing...";
+        extractedSecretText = null;
+
+        try
+        {
+            await using var imageStream = new MemoryStream();
+            await extractStegoImageFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(imageStream);
+            imageStream.Position = 0;
+
+            using (Image<Rgba32> stegoImageToDecode = Image.Load<Rgba32>(imageStream))
+            {
+                extractedSecretText = ImageSteganographyUtility.ExtractText(stegoImageToDecode, extractKey);
+                extractStatusMessage = "Secret extracted successfully!";
+            }
+        }
+        catch (CryptographicException)
+        {
+            extractStatusMessage = "Decryption failed. The key is likely incorrect.";
+            extractedSecretText = "ERROR: Could not decrypt data.";
+        }
+        catch (Exception ex)
+        {
+            extractStatusMessage = $"Error: {ex.Message}";
+            extractedSecretText = "Could not extract secret. Check the key or image file.";
+        }
+    }
+}
