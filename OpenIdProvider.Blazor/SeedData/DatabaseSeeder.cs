@@ -15,6 +15,21 @@ namespace OpenIdProvider.Blazor.Services;
 /// <summary>
 /// A service to seed the database with a large volume of realistic test data using Bogus.
 /// </summary>
+/// <usage>
+/// using (var scope = app.Services.CreateScope())
+///{
+///    var services = scope.ServiceProvider;
+///    var appDbContext = services.GetRequiredService<ApplicationDbContext>();
+///    var configDbContext = services.GetRequiredService<ConfigurationDbContext>();
+///    var grantDbContext = services.GetRequiredService<PersistedGrantDbContext>();
+///    var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+///    var logger = services.GetRequiredService<ILogger<DatabaseSeeder>>();
+///
+///    var seeder = new DatabaseSeeder(appDbContext, configDbContext, grantDbContext, userManager, logger);
+///    await seeder.SeedAsync(forceDelete: true, managersCount: 2, usersPerOrg: 50, groupsPerOrg: 15, clientsPerOrg: 3);
+///}
+/// </usage>
+
 public class DatabaseSeeder
 {
     private readonly ApplicationDbContext _appDbContext;
