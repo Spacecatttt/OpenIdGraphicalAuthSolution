@@ -32,6 +32,7 @@ namespace OpenIdProvider.Data.Migrations.Application
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: true),
                     Slug = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -68,10 +69,15 @@ namespace OpenIdProvider.Data.Migrations.Application
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    GraphicalPasswordHash = table.Column<string>(type: "text", nullable: true),
+                    DisplayName = table.Column<string>(type: "text", nullable: false),
+                    AvatarUrl = table.Column<string>(type: "text", nullable: true),
+                    GraphicalPasswordKey = table.Column<string>(type: "text", nullable: true),
                     GraphicalAuthMethodType = table.Column<string>(type: "text", nullable: true),
-                    GraphicalAuthMetadata = table.Column<string>(type: "text", nullable: true),
-                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Country = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Location = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Address = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    Bio = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
+                    PrimaryOrganizationId = table.Column<Guid>(type: "uuid", nullable: true),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -91,7 +97,26 @@ namespace OpenIdProvider.Data.Migrations.Application
                 {
                     table.PrimaryKey("PK_AspNetUsers", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_AspNetUsers_Organizations_OrganizationId",
+                        name: "FK_AspNetUsers_Organizations_PrimaryOrganizationId",
+                        column: x => x.PrimaryOrganizationId,
+                        principalTable: "Organizations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ClientOwnerships",
+                columns: table => new
+                {
+                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ClientId = table.Column<int>(type: "integer", nullable: false),
+                    EnableSignup = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ClientOwnerships", x => new { x.OrganizationId, x.ClientId });
+                    table.ForeignKey(
+                        name: "FK_ClientOwnerships_Organizations_OrganizationId",
                         column: x => x.OrganizationId,
                         principalTable: "Organizations",
                         principalColumn: "Id",
@@ -112,6 +137,24 @@ namespace OpenIdProvider.Data.Migrations.Application
                     table.PrimaryKey("PK_Groups", x => x.Id);
                     table.ForeignKey(
                         name: "FK_Groups_Organizations_OrganizationId",
+                        column: x => x.OrganizationId,
+                        principalTable: "Organizations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "OrganizationClientPermissions",
+                columns: table => new
+                {
+                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ClientId = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OrganizationClientPermissions", x => new { x.OrganizationId, x.ClientId });
+                    table.ForeignKey(
+                        name: "FK_OrganizationClientPermissions_Organizations_OrganizationId",
                         column: x => x.OrganizationId,
                         principalTable: "Organizations",
                         principalColumn: "Id",
@@ -204,6 +247,50 @@ namespace OpenIdProvider.Data.Migrations.Application
                 });
 
             migrationBuilder.CreateTable(
+                name: "UserClientPermissions",
+                columns: table => new
+                {
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ClientId = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserClientPermissions", x => new { x.UserId, x.ClientId });
+                    table.ForeignKey(
+                        name: "FK_UserClientPermissions_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserOrganizationRoles",
+                columns: table => new
+                {
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Role = table.Column<int>(type: "integer", maxLength: 50, nullable: false),
+                    AddedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserOrganizationRoles", x => new { x.UserId, x.OrganizationId });
+                    table.ForeignKey(
+                        name: "FK_UserOrganizationRoles_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_UserOrganizationRoles_Organizations_OrganizationId",
+                        column: x => x.OrganizationId,
+                        principalTable: "Organizations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "GroupClaims",
                 columns: table => new
                 {
@@ -228,22 +315,21 @@ namespace OpenIdProvider.Data.Migrations.Application
                 name: "UserGroups",
                 columns: table => new
                 {
-                    ApplicationUserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    GroupId = table.Column<Guid>(type: "uuid", nullable: false),
-                    AssignedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    GroupsId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UsersId = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_UserGroups", x => new { x.ApplicationUserId, x.GroupId });
+                    table.PrimaryKey("PK_UserGroups", x => new { x.GroupsId, x.UsersId });
                     table.ForeignKey(
-                        name: "FK_UserGroups_AspNetUsers_ApplicationUserId",
-                        column: x => x.ApplicationUserId,
+                        name: "FK_UserGroups_AspNetUsers_UsersId",
+                        column: x => x.UsersId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_UserGroups_Groups_GroupId",
-                        column: x => x.GroupId,
+                        name: "FK_UserGroups_Groups_GroupsId",
+                        column: x => x.GroupsId,
                         principalTable: "Groups",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -281,9 +367,9 @@ namespace OpenIdProvider.Data.Migrations.Application
                 column: "NormalizedEmail");
 
             migrationBuilder.CreateIndex(
-                name: "IX_AspNetUsers_OrganizationId",
+                name: "IX_AspNetUsers_PrimaryOrganizationId",
                 table: "AspNetUsers",
-                column: "OrganizationId");
+                column: "PrimaryOrganizationId");
 
             migrationBuilder.CreateIndex(
                 name: "UserNameIndex",
@@ -308,9 +394,14 @@ namespace OpenIdProvider.Data.Migrations.Application
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_UserGroups_GroupId",
+                name: "IX_UserGroups_UsersId",
                 table: "UserGroups",
-                column: "GroupId");
+                column: "UsersId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserOrganizationRoles_OrganizationId",
+                table: "UserOrganizationRoles",
+                column: "OrganizationId");
         }
 
         /// <inheritdoc />
@@ -332,19 +423,31 @@ namespace OpenIdProvider.Data.Migrations.Application
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
+                name: "ClientOwnerships");
+
+            migrationBuilder.DropTable(
                 name: "GroupClaims");
+
+            migrationBuilder.DropTable(
+                name: "OrganizationClientPermissions");
+
+            migrationBuilder.DropTable(
+                name: "UserClientPermissions");
 
             migrationBuilder.DropTable(
                 name: "UserGroups");
 
             migrationBuilder.DropTable(
+                name: "UserOrganizationRoles");
+
+            migrationBuilder.DropTable(
                 name: "AspNetRoles");
 
             migrationBuilder.DropTable(
-                name: "AspNetUsers");
+                name: "Groups");
 
             migrationBuilder.DropTable(
-                name: "Groups");
+                name: "AspNetUsers");
 
             migrationBuilder.DropTable(
                 name: "Organizations");

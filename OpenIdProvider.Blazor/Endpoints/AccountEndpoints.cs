@@ -300,8 +300,7 @@ public static class AccountEndpoints
 
                 ApplicationUser userToSignIn;
 
-                var existingUser = await userManager.FindByEmailAsync(input.User.Email) ??
-                    throw new InvalidOperationException("User for upgrade not found.");
+                var existingUser = await userManager.FindByEmailAsync(input.User.Email);
 
                 if (existingUser != null && existingUser.PrimaryOrganizationId == null)
                 {
@@ -338,7 +337,8 @@ public static class AccountEndpoints
                         PrimaryOrganizationId = organization.Id
                     };
                     var createResult = await userManager.CreateAsync(newUser, input.User.Password);
-                    if (!createResult.Succeeded) throw new Exception(string.Join(", ", createResult.Errors.Select(e => e.Description)));
+                    if (!createResult.Succeeded)
+                        throw new Exception(string.Join(", ", createResult.Errors.Select(e => e.Description)));
                     userToSignIn = newUser;
                 }
 
