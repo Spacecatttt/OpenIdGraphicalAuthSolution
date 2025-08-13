@@ -218,13 +218,8 @@ else
     {
         if (AppState.CurrentUser == null) return OrganizationRole.Viewer;
 
-        if (AppState.CurrentUser.PrimaryOrganizationId == orgId)
-        {
-            return OrganizationRole.Owner;
-        }
-
         var managedRole = AppState.CurrentUser.ManagedOrganizations
-        .FirstOrDefault(mo => mo.OrganizationId == orgId);
+            .FirstOrDefault(mo => mo.OrganizationId == orgId);
 
         return managedRole?.Role ?? OrganizationRole.Viewer;
     }

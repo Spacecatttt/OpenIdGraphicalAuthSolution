@@ -201,6 +201,15 @@ public class DatabaseSeeder
             EmailConfirmed = true
         };
         await _userManager.CreateAsync(user, Password);
+
+        _appDbContext.UserOrganizationRoles.Add(new UserOrganizationRole
+        {
+            UserId = user.Id,
+            OrganizationId = personalOrg.Id,
+            Role = OrganizationRole.Owner
+        });
+        await _appDbContext.SaveChangesAsync();
+
         return user;
     }
 }

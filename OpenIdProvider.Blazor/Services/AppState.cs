@@ -46,7 +46,7 @@ public class AppState : IDisposable
                 var userWithData = await dbContext.Users
                     .Include(u => u.PrimaryOrganization)
                     .Include(u => u.ManagedOrganizations)
-                        .ThenInclude(mo => mo.Organization)
+                    .ThenInclude(mo => mo.Organization)
                     .AsNoTracking()
                     .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
 
@@ -54,17 +54,11 @@ public class AppState : IDisposable
                 {
                     CurrentUser = userWithData;
 
-                    var orgs = new List<Organization>();
-                    if (userWithData.PrimaryOrganization != null)
-                    {
-                        orgs.Add(userWithData.PrimaryOrganization);
-                    }
-
-                    var managedOrgs = userWithData.ManagedOrganizations
-                        .Where(mo => mo.Role >= OrganizationRole.Viewer)
-                        .Select(mo => mo.Organization);
-                    orgs.AddRange(managedOrgs);
-                    UserOrganizations = orgs.DistinctBy(o => o.Id).ToList();
+                    UserOrganizations = userWithData.ManagedOrganizations
+                            .Where(mo => mo.Role >= OrganizationRole.Viewer)
+                            .Select(mo => mo.Organization)
+                            .DistinctBy(o => o.Id)
+                            .ToList();
 
                     var currentSlug = SelectedOrganization?.Slug;
                     if (currentSlug == null || !UserOrganizations.Any(o => o.Slug == currentSlug))
@@ -107,11 +101,6 @@ public class AppState : IDisposable
         if (CurrentUser == null || SelectedOrganization == null)
         {
             CurrentUserRoleInSelectedOrg = null;
-            return;
-        }
-        if (CurrentUser.PrimaryOrganizationId == SelectedOrganization.Id)
-        {
-            CurrentUserRoleInSelectedOrg = OrganizationRole.Owner;
             return;
         }
 

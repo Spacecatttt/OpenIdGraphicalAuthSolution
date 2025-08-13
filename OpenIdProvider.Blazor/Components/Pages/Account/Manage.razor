@@ -189,8 +189,8 @@ else
                                     <button type="button" class="password-btn" @onclick="TogglePasswordVisibility"
                                         title="Show/Hide Password">
                                         <img src="@(newPasswordFieldType == "password" ?
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   "/images/security/eye_show.png" :
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   "/images/security/eye_hide.png")"
+                                            "/images/security/eye_show.png" :
+                                            "/images/security/eye_hide.png")"
                                             alt="Show/Hide" />
                                     </button>
                                 </div>
@@ -207,8 +207,8 @@ else
                                     <button type="button" class="password-btn" @onclick="TogglePasswordVisibility"
                                         title="Show/Hide Password">
                                         <img src="@(newPasswordFieldType == "password" ?
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   "/images/security/eye_show.png" :
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   "/images/security/eye_hide.png")"
+                                            "/images/security/eye_show.png" :
+                                            "/images/security/eye_hide.png")"
                                             alt="Show/Hide" />
                                     </button>
                                 </div>
@@ -360,8 +360,7 @@ else
         };
 
         ownedOrganizations = AppState.UserOrganizations
-        .Where(org => (user.PrimaryOrganizationId.HasValue && org.Id == user.PrimaryOrganizationId.Value) ||
-        user.ManagedOrganizations.Any(mo => mo.OrganizationId == org.Id && mo.Role == OrganizationRole.Owner))
+        .Where(org => user.ManagedOrganizations.Any(mo => mo.OrganizationId == org.Id && mo.Role == OrganizationRole.Owner))
         .DistinctBy(o => o.Id)
         .ToList();
 
@@ -419,57 +418,16 @@ else
             userToUpdate.Country = profileModel.Country;
             userToUpdate.Location = profileModel.Location;
             userToUpdate.Address = profileModel.Address;
+            userToUpdate.PrimaryOrganizationId = profileModel.PrimaryOrganizationId;
 
             var selectedGroupIds = profileModel.SelectedGroups.Select(g => g.Id).ToHashSet();
             var candidateGroups = await dbContext.Groups.Where(g => selectedGroupIds.Contains(g.Id)).ToListAsync();
             userToUpdate.Groups.SyncCollection(
-            viewModelItems: profileModel.SelectedGroups,
+            viewModelItems: candidateGroups,
             entityKeySelector: group => group.Id,
             viewModelKeySelector: vm => vm.Id,
-            creator: vm => candidateGroups.First(g => g.Id == vm.Id)
+            creator: vm => vm
             );
-
-            // Processing a change in the primary organization
-            if (userToUpdate.PrimaryOrganizationId != profileModel.PrimaryOrganizationId)
-            {
-                var oldPrimaryOrgId = userToUpdate.PrimaryOrganizationId;
-                var newPrimaryOrgId = profileModel.PrimaryOrganizationId;
-                userToUpdate.PrimaryOrganizationId = newPrimaryOrgId;
-
-                // If there was an old primary org, ensure the user retains ownership via an explicit role.
-                if (oldPrimaryOrgId.HasValue)
-                {
-                    var existingRoleForOldOrg = await dbContext.UserOrganizationRoles
-                    .FirstOrDefaultAsync(r => r.UserId == userToUpdate.Id &&
-                    r.OrganizationId == oldPrimaryOrgId.Value);
-
-                    if (existingRoleForOldOrg == null)
-                    {
-                        dbContext.UserOrganizationRoles.Add(
-                        new UserOrganizationRole
-                        {
-                            UserId = userToUpdate.Id,
-                            OrganizationId = oldPrimaryOrgId.Value,
-                            Role = OrganizationRole.Owner
-                        }
-                        );
-                    }
-                }
-
-                // If the new primary org has an explicit role, remove it,
-                // as the primary link is now the source of truth for ownership.
-                if (newPrimaryOrgId.HasValue)
-                {
-                    var existingRoleForNewOrg = await dbContext.UserOrganizationRoles
-                    .FirstOrDefaultAsync(r => r.UserId == userToUpdate.Id &&
-                    r.OrganizationId == newPrimaryOrgId.Value);
-
-                    if (existingRoleForNewOrg != null)
-                    {
-                        dbContext.UserOrganizationRoles.Remove(existingRoleForNewOrg);
-                    }
-                }
-            }
 
             var result = await dbContext.SaveChangesAsync();
             if (result > 0)

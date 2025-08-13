@@ -358,33 +358,36 @@ else
                 .AsNoTracking()
                 .FirstOrDefaultAsync(uor => uor.UserId == UserId && uor.OrganizationId == AppState.SelectedOrganization.Id);
 
-            if (user != null && userRole != null)
+            if (user == null || userRole == null)
             {
-                if (AppState.CurrentUserRoleInSelectedOrg < userRole.Role)
-                {
-                    errorMessage = "You cannot edit a user with a higher role than your own.";
-                    userModel = new();
-                    isLoading = false;
-                    return;
-                }
-
-                userModel = new UserViewModel
-                {
-                    DisplayName = user.DisplayName!,
-                    UserName = user.UserName!,
-                    Email = user.Email!,
-                    AvatarUrl = user.AvatarUrl,
-                    Role = userRole.Role,
-                    SelectedGroupIds = user.Groups.Select(g => g.Id).ToList(),
-                    SelectedClientIds = user.AllowedClientPermissions.Select(p => p.ClientId).ToList(),
-                    Country = user.Country,
-                    Location = user.Location,
-                    Address = user.Address,
-                    Bio = user.Bio,
-                    AuthType = string.IsNullOrEmpty(user.GraphicalAuthMethodType) ? AuthMethod.Password : AuthMethod.Graphical
-                };
+                errorMessage = "User not found in the selected organization.";
+                isLoading = false;
+                return;
             }
-            else { errorMessage = "User not found in the selected organization."; }
+
+            if (AppState.CurrentUser?.Id != UserId && AppState.CurrentUserRoleInSelectedOrg <= userRole.Role)
+            {
+                errorMessage = "You cannot edit a user with a higher or equal role than your own.";
+                userModel = new();
+                isLoading = false;
+                return;
+            }
+
+            userModel = new UserViewModel
+            {
+                DisplayName = user.DisplayName!,
+                UserName = user.UserName!,
+                Email = user.Email!,
+                AvatarUrl = user.AvatarUrl,
+                Role = userRole.Role,
+                SelectedGroupIds = user.Groups.Select(g => g.Id).ToList(),
+                SelectedClientIds = user.AllowedClientPermissions.Select(p => p.ClientId).ToList(),
+                Country = user.Country,
+                Location = user.Location,
+                Address = user.Address,
+                Bio = user.Bio,
+                AuthType = string.IsNullOrEmpty(user.GraphicalPasswordKey) ? AuthMethod.Password : AuthMethod.Graphical
+            };
         }
         isLoading = false;
     }
@@ -443,30 +446,12 @@ else
 
         await using var dbContext = await DbContextFactory.CreateDbContextAsync();
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
-
+        ApplicationUser? newUser = null;
         try
         {
             if (IsNew)
             {
-                Guid? primaryOrgId = null;
-                if (userModel.Role >= OrganizationRole.Viewer)
-                {
-                    // Create a personal organization for the new user
-                    var personalOrg = new Organization
-                    {
-                        Name = $"{userModel.UserName}'s Personal Space",
-                        Slug = $"{userModel.UserName}-personal-space",
-                        CreatedDate = DateTime.UtcNow,
-                        ModifiedDate = DateTime.UtcNow
-                    };
-                    dbContext.Organizations.Add(personalOrg);
-                    await dbContext.SaveChangesAsync();
-                    primaryOrgId = personalOrg.Id;
-                }
-
-                // Create new user and set their PrimaryOrganizationId
-                // For 'Member' role, primaryOrgId remains null.
-                var newUser = new ApplicationUser
+                newUser = new ApplicationUser
                 {
                     UserName = userModel.UserName,
                     Email = userModel.Email,
@@ -477,34 +462,61 @@ else
                     Address = userModel.Address,
                     Bio = userModel.Bio,
                     GraphicalPasswordKey = userModel.GraphicalPasswordKey,
-                    GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ? "ImageSteganography" : null,
-                    PrimaryOrganizationId = primaryOrgId
+                    GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ? "ImageSteganography" : null
                 };
-                var result = await UserManager.CreateAsync(newUser, userModel.Password);
 
+                var result = await UserManager.CreateAsync(newUser, userModel.Password);
                 if (!result.Succeeded)
                 {
                     throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
                 }
 
-                dbContext.UserOrganizationRoles.Add(new UserOrganizationRole
+                // Create all related data
+                var userToUpdate = await dbContext.Users.FindAsync(newUser.Id);
+                if (userToUpdate == null)
+                {
+                    throw new Exception("Failed to retrieve newly created user.");
+                }
+
+                if (userModel.Role >= OrganizationRole.Viewer)
+                {
+                    var personalOrg = new Organization
+                    {
+                        Name = $"{userModel.UserName}'s Personal Space",
+                        Slug = $"{userModel.UserName}-personal-space",
+                        CreatedDate = DateTime.UtcNow,
+                        ModifiedDate = DateTime.UtcNow
+                    };
+                    dbContext.Organizations.Add(personalOrg);
+                    await dbContext.SaveChangesAsync();
+                    userToUpdate.PrimaryOrganizationId = personalOrg.Id;
+
+                    // Add the Owner role
+                    dbContext.UserOrganizationRoles.Add(new UserOrganizationRole
                     {
                         UserId = newUser.Id,
-                        OrganizationId = AppState.SelectedOrganization.Id,
-                        Role = userModel.Role
-                    }
-                );
+                        OrganizationId = personalOrg.Id,
+                        Role = OrganizationRole.Owner
+                    });
+                }
+
+                dbContext.UserOrganizationRoles.Add(new UserOrganizationRole
+                {
+                    UserId = newUser.Id,
+                    OrganizationId = AppState.SelectedOrganization!.Id,
+                    Role = userModel.Role
+                });
 
                 // Assign groups
                 var selectedGroups = await dbContext.Groups.Where(g => userModel.SelectedGroupIds.Contains(g.Id)).ToListAsync();
                 foreach (var group in selectedGroups)
                 {
-                    newUser.Groups.Add(group);
+                    userToUpdate.Groups.Add(group);
                 }
                 // Assign clients
                 foreach(var clientId in userModel.SelectedClientIds)
                 {
-                    newUser.AllowedClientPermissions.Add(new UserClientPermission { ClientId = clientId });
+                    userToUpdate.AllowedClientPermissions.Add(new UserClientPermission { ClientId = clientId });
                 }
             }
             else
@@ -539,6 +551,31 @@ else
                     throw new Exception("Could not find the user to update.");
                 }
 
+                // Check if the role is being changed to Owner
+                if (userModel.Role == OrganizationRole.Owner && userRoleToUpdate.Role != OrganizationRole.Owner)
+                {
+                    var currentOwnerRole = await dbContext.UserOrganizationRoles
+                        .FirstOrDefaultAsync(
+                            r => r.OrganizationId == AppState.SelectedOrganization.Id
+                            && r.Role == OrganizationRole.Owner
+                        );
+
+                    // Demote the current owner to Admin and
+                    // promote the new user to Owner
+                    if (currentOwnerRole != null)
+                    {
+                        currentOwnerRole.Role = OrganizationRole.Admin;
+                    }
+                    userRoleToUpdate.Role = OrganizationRole.Owner;
+
+                    // Update the PrimaryOrganizationId as a preference pointer
+                    userToUpdate.PrimaryOrganizationId = AppState.SelectedOrganization.Id;
+                }
+                else
+                {
+                    userRoleToUpdate.Role = userModel.Role;
+                }
+
                 userToUpdate.DisplayName = userModel.DisplayName;
                 userToUpdate.UserName = userModel.UserName;
                 userToUpdate.AvatarUrl = userModel.AvatarUrl;
@@ -550,7 +587,6 @@ else
                 userToUpdate.GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ?
                                                                 "ImageSteganography"
                                                                 : null;
-                userRoleToUpdate.Role = userModel.Role;
 
                 // Groups
                 var selectedGroups = await dbContext.Groups.Where(g => userModel.SelectedGroupIds.Contains(g.Id)).ToListAsync();
@@ -571,6 +607,10 @@ else
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
+            if (newUser != null)
+            {
+                await UserManager.DeleteAsync(newUser);
+            }
             Logger.LogError(ex, "An error occurred while saving the user.");
             errorMessage = $"An error occurred: {ex.Message}";
         }
