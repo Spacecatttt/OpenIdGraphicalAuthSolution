@@ -146,9 +146,9 @@ else
                 @if (userModel.AuthType == AuthMethod.Graphical)
                 {
                     <div class="form-group">
-                        <p class="upload-instruction">Please upload a .png image that will be used as the user's graphical password.</p>
+                        <p class="upload-instruction">Please upload a .png or .jpg image that will be used as the user's graphical password.</p>
                         <div class="file-drop-zone">
-                            <InputFile OnChange="HandleGraphicalFileSelected" accept=".png" class="file-drop-zone-input-overlay" />
+                            <InputFile OnChange="HandleGraphicalFileSelected" accept=".png,.jpg,.jpeg" class="file-drop-zone-input-overlay" />
                             <span class="file-drop-zone-text">
                                 @if (!string.IsNullOrEmpty(graphicalPasswordStatusMessage)) { @graphicalPasswordStatusMessage; }
                                 else { @("Select or drop file here"); }
@@ -664,9 +664,10 @@ else
             return;
         }
 
-        if (file.ContentType != "image/png")
+        var allowedTypes = new[] { "image/png", "image/jpeg" };
+        if (!allowedTypes.Contains(file.ContentType))
         {
-            graphicalPasswordStatusMessage = "Error: Only .png files are allowed.";
+            graphicalPasswordStatusMessage = "Error: Only .png or .jpg files are allowed.";
             graphicalPasswordModel.BaseImageFile = null;
         }
         else if (file.Size > maxFileSize)
