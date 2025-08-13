@@ -34,5 +34,13 @@ public class ManagerUserHandler : AuthorizationHandler<ManagerUserRequirement>
         {
             context.Succeed(requirement);
         }
+        // In case if Manager no need to have own Organization
+        //var isManager = await dbContext.UserOrganizationRoles
+        //.AnyAsync(role => role.UserId == userId && role.Role >= OrganizationRole.Viewer);
+        //
+        //if (isManager)
+        //{
+        //    context.Succeed(requirement);
+        //}
     }
 }

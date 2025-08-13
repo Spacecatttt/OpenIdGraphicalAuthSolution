@@ -342,6 +342,13 @@ public static class AccountEndpoints
                     userToSignIn = newUser;
                 }
 
+                dbContext.UserOrganizationRoles.Add(new UserOrganizationRole
+                {
+                    UserId = userToSignIn.Id,
+                    OrganizationId = organization.Id,
+                    Role = OrganizationRole.Owner
+                });
+
                 await transaction.CommitAsync();
                 await signInManager.SignInAsync(userToSignIn, isPersistent: false);
                 return Results.Redirect("/");
@@ -383,7 +390,7 @@ public class RegistrationInputModel
 {
     public UserInputModel User { get; set; } = new();
     public OrganizationInputModel Organization { get; set; } = new();
-    public bool IsUpgrade { get; set; } // <-- ДОДАЙТЕ ЦЕЙ РЯДОК
+    public bool IsUpgrade { get; set; }
 }
 public class UserInputModel
 {

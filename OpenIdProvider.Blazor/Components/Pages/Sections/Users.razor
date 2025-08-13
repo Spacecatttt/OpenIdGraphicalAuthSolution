@@ -178,31 +178,12 @@ else
         else
         {
             await using var dbContext = await DbContextFactory.CreateDbContextAsync();
-            var loadedRoles = await dbContext.UserOrganizationRoles
+            allUsersForOrg  = await dbContext.UserOrganizationRoles
                 .Include(uor => uor.User)
                 .Where(uor => uor.OrganizationId == AppState.SelectedOrganization.Id)
                 .AsNoTracking()
+                .OrderBy(uor => uor.User.DisplayName)
                 .ToListAsync();
-
-            var currentUser = AppState.CurrentUser;
-            var selectedOrg = AppState.SelectedOrganization;
-
-            if (currentUser != null
-                && currentUser.PrimaryOrganizationId == selectedOrg.Id
-                && !loadedRoles.Any(r => r.UserId == currentUser.Id))
-            {
-                loadedRoles.Add(new UserOrganizationRole
-                {
-                    User = currentUser,
-                    UserId = currentUser.Id,
-                    OrganizationId = selectedOrg.Id,
-                    Role = OrganizationRole.Owner,
-                    AddedDate = currentUser.PrimaryOrganization?.CreatedDate ?? DateTime.UtcNow
-                });
-
-            }
-
-            allUsersForOrg = loadedRoles.OrderBy(uor => uor.User.DisplayName).ToList();
         }
 
         FilterUsers();

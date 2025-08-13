@@ -1,40 +1,54 @@
 using System.Security.Cryptography;
+using System.Text;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
 public static class ImageSteganographyUtility
 {
     private const int SaltSize = 16;
+    private const int Pbkdf2Iterations = 10000;
+    // Size of blocks for complexity analysis
+    private const int BlockSize = 8;
+    // Threshold for standard deviation to consider a block "complex" enough
+    private const double ComplexityThreshold = 10.0;
 
     public static Image<Rgba32> EmbedText(Image<Rgba32> image, string textToEncrypt, string key)
     {
         byte[] encryptedData = Encrypt(textToEncrypt, key);
 
-        if (encryptedData.Length * 8 + 32 > image.Width * image.Height * 3)
+        // Generate a map of safe, shuffled locations for embedding
+        List<Point> embeddingMap = GetEmbeddingMap(image, key);
+
+        // Check if the image has enough capacity in its complex regions
+        // We need space for the message length (32 bits) + the message itself
+        int requiredBits = 32 + encryptedData.Length * 8;
+        if (embeddingMap.Count * 3 < requiredBits)
         {
-            throw new ArgumentException("Image is too small to hold this text.");
+            throw new ArgumentException("Image is not complex enough or too small to hold this text.");
         }
 
         Image<Rgba32> newImage = image.Clone();
 
-        // Manual byte conversion for endianness safety
+        // Embed Data Length (32 bits)
         int length = encryptedData.Length;
-        byte[] dataLengthBytes =
-        [
-            (byte)length,
-            (byte)(length >> 8),
-            (byte)(length >> 16),
-            (byte)(length >> 24),
-        ];
+        byte[] dataLengthBytes = BitConverter.GetBytes(length);
+
         for (int i = 0; i < 32; i++)
         {
-            EmbedBit(newImage, i, GetBit(dataLengthBytes[i / 8], i % 8));
+            Point location = embeddingMap[i / 3];
+            int channel = i % 3;
+            bool bit = GetBit(dataLengthBytes[i / 8], i % 8);
+            EmbedBitInPixel(newImage, location.X, location.Y, channel, bit);
         }
 
+        // Embed Encrypted Message
         for (int i = 0; i < encryptedData.Length * 8; i++)
         {
-            int pixelIndex = i + 32;
-            EmbedBit(newImage, pixelIndex, GetBit(encryptedData[i / 8], i % 8));
+            int mapIndex = 32 + i;
+            Point location = embeddingMap[mapIndex / 3];
+            int channel = mapIndex % 3;
+            bool bit = GetBit(encryptedData[i / 8], i % 8);
+            EmbedBitInPixel(newImage, location.X, location.Y, channel, bit);
         }
 
         return newImage;
@@ -42,138 +56,176 @@ public static class ImageSteganographyUtility
 
     public static string ExtractText(Image<Rgba32> image, string key)
     {
+        List<Point> embeddingMap = GetEmbeddingMap(image, key);
+        if (embeddingMap.Count * 3 < 32)
+        {
+            throw new InvalidOperationException("Invalid data or corrupted image: not enough capacity for length.");
+        }
+
+        // Extract Data Length
         byte[] dataLengthBytes = new byte[4];
         for (int i = 0; i < 32; i++)
         {
-            SetBit(ref dataLengthBytes[i / 8], i % 8, ExtractBit(image, i));
+            Point location = embeddingMap[i / 3];
+            int channel = i % 3;
+            bool bit = ExtractBitFromPixel(image, location.X, location.Y, channel);
+            SetBit(ref dataLengthBytes[i / 8], i % 8, bit);
         }
 
-        // Manual byte conversion for endianness safety
-        int dataLength = dataLengthBytes[0] |
-                        (dataLengthBytes[1] << 8) |
-                        (dataLengthBytes[2] << 16) |
-                        (dataLengthBytes[3] << 24);
-
-        // Capacity check based on 3 channels (RGB)
-        if (dataLength <= 0 || dataLength * 8 + 32 > image.Width * image.Height * 3)
+        int dataLength = BitConverter.ToInt32(dataLengthBytes, 0);
+        if (dataLength <= 0 || (dataLength * 8 + 32) > embeddingMap.Count * 3)
         {
             throw new InvalidOperationException("Invalid data or corrupted image.");
         }
 
+        // Extract Encrypted Message
         byte[] encryptedData = new byte[dataLength];
         for (int i = 0; i < dataLength * 8; i++)
         {
-            int pixelIndex = i + 32;
-            SetBit(ref encryptedData[i / 8], i % 8, ExtractBit(image, pixelIndex));
+            int mapIndex = 32 + i;
+            Point location = embeddingMap[mapIndex / 3];
+            int channel = mapIndex % 3;
+            bool bit = ExtractBitFromPixel(image, location.X, location.Y, channel);
+            SetBit(ref encryptedData[i / 8], i % 8, bit);
         }
 
         return Decrypt(encryptedData, key);
     }
 
-    // Helper methods for bit manipulation
-    private static void EmbedBit(Image<Rgba32> img, int index, bool bit)
+    /// <summary>
+    /// Generates a shuffled, reproducible list of "safe" pixel coordinates for embedding.
+    /// </summary>
+    private static List<Point> GetEmbeddingMap(Image<Rgba32> image, string key)
     {
-        // Calculation is based on 3 channels (RGB)
-        int pixelX = (index / 3) % img.Width;
-        int pixelY = (index / 3) / img.Width;
-        int channel = index % 3; // 0=R, 1=G, 2=B
+        var safeLocations = new List<Point>();
 
-        Rgba32 pixel = img[pixelX, pixelY];
+        for (int y = 0; y < image.Height - BlockSize; y += BlockSize)
+        {
+            for (int x = 0; x < image.Width - BlockSize; x += BlockSize)
+            {
+                var luminances = new List<double>();
+                for (int blockY = 0; blockY < BlockSize; blockY++)
+                {
+                    for (int blockX = 0; blockX < BlockSize; blockX++)
+                    {
+                        Rgba32 pixel = image[x + blockX, y + blockY];
+                        // Standard luminance calculation
+                        luminances.Add(0.299 * pixel.R + 0.587 * pixel.G + 0.114 * pixel.B);
+                    }
+                }
+
+                double stdDev = CalculateStdDev(luminances);
+                if (stdDev > ComplexityThreshold)
+                {
+                    // If block is complex enough, add all its pixels to the list
+                    for (int blockY = 0; blockY < BlockSize; blockY++)
+                    {
+                        for (int blockX = 0; blockX < BlockSize; blockX++)
+                        {
+                            safeLocations.Add(new Point(x + blockX, y + blockY));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Shuffle the list of safe locations using the key as a seed
+        int seed = key.GetHashCode();
+        var random = new Random(seed);
+
+        // Fisher-Yates shuffle algorithm
+        for (int i = safeLocations.Count - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (safeLocations[i], safeLocations[j]) = (safeLocations[j], safeLocations[i]);
+        }
+
+        return safeLocations;
+    }
+
+    /// <summary>
+    /// Calculates the sample standard deviation for a list of values.
+    /// </summary>
+    private static double CalculateStdDev(List<double> values)
+    {
+        if (values.Count < 2) return 0;
+        double avg = values.Average();
+        double sum = values.Sum(d => Math.Pow(d - avg, 2));
+        return Math.Sqrt(sum / (values.Count - 1));
+    }
+
+    private static void EmbedBitInPixel(Image<Rgba32> img, int x, int y, int channel, bool bit)
+    {
+        Rgba32 pixel = img[x, y];
         byte r = pixel.R, g = pixel.G, b = pixel.B;
 
-        if (channel == 0) r = SetLsb(r, bit);
-        else if (channel == 1) g = SetLsb(g, bit);
-        else b = SetLsb(b, bit);
-        // The alpha channel (pixel.A) is not modified
+        switch (channel)
+        {
+            case 0: r = SetLsb(r, bit); break;
+            case 1: g = SetLsb(g, bit); break;
+            case 2: b = SetLsb(b, bit); break;
+        }
 
-        img[pixelX, pixelY] = new Rgba32(r, g, b, pixel.A);
+        img[x, y] = new Rgba32(r, g, b, pixel.A);
     }
-    private static bool ExtractBit(Image<Rgba32> img, int index)
+
+    private static bool ExtractBitFromPixel(Image<Rgba32> img, int x, int y, int channel)
     {
-        // Calculation is based on 3 channels (RGB)
-        int pixelX = (index / 3) % img.Width;
-        int pixelY = (index / 3) / img.Width;
-        int channel = index % 3; // 0=R, 1=G, 2=B
-
-        Rgba32 pixel = img[pixelX, pixelY];
-
-        if (channel == 0) return (pixel.R & 1) == 1;
-        if (channel == 1) return (pixel.G & 1) == 1;
-        // else
-        return (pixel.B & 1) == 1;
+        Rgba32 pixel = img[x, y];
+        return channel switch
+        {
+            0 => (pixel.R & 1) == 1,
+            1 => (pixel.G & 1) == 1,
+            _ => (pixel.B & 1) == 1,
+        };
     }
-    private static byte SetLsb(byte value, bool bit) => bit ? (byte)(value | 1) : (byte)(value & ~1);
+
+    private static byte SetLsb(byte value, bool bit) => bit ? (byte)(value | 1) : (byte)(value & 0xFE);
     private static bool GetBit(byte b, int bitNumber) => ((b >> bitNumber) & 1) == 1;
     private static void SetBit(ref byte b, int bitNumber, bool value)
     {
-        if (value)
-            b = (byte)(b | (1 << bitNumber));
-        else
-            b = (byte)(b & ~(1 << bitNumber));
+        if (value) b = (byte)(b | (1 << bitNumber));
+        else b = (byte)(b & ~(1 << bitNumber));
     }
 
     // Encryption and Decryption methods
     private static byte[] Encrypt(string plainText, string key)
     {
         byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
-        byte[] iv;
-        byte[] encrypted;
+        using var aes = Aes.Create();
+        aes.Key = new Rfc2898DeriveBytes(key, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256).GetBytes(32);
+        byte[] iv = aes.IV;
 
-        using (var aes = Aes.Create())
+        using var memoryStream = new MemoryStream();
+        memoryStream.Write(salt, 0, salt.Length);
+        memoryStream.Write(iv, 0, iv.Length);
+
+        using (var cryptoStream = new CryptoStream(memoryStream, aes.CreateEncryptor(), CryptoStreamMode.Write, leaveOpen: true))
         {
-            iv = aes.IV;
-            using (var keyDerivation = new Rfc2898DeriveBytes(key, salt, 10000, HashAlgorithmName.SHA256))
-            {
-                aes.Key = keyDerivation.GetBytes(32); // 256-bit key
-            }
-            using var encryptor = aes.CreateEncryptor(aes.Key, aes.IV);
-            using var memoryStream = new MemoryStream();
-            using (var cryptoStream = new CryptoStream(memoryStream, encryptor, CryptoStreamMode.Write))
-            using (var streamWriter = new StreamWriter(cryptoStream))
+            using (var streamWriter = new StreamWriter(cryptoStream, Encoding.UTF8))
             {
                 streamWriter.Write(plainText);
             }
-            encrypted = memoryStream.ToArray();
         }
-        // Combine Salt, IV, and the ciphertext into a single array
-        var result = new byte[salt.Length + iv.Length + encrypted.Length];
-        Buffer.BlockCopy(salt, 0, result, 0, salt.Length);
-        Buffer.BlockCopy(iv, 0, result, salt.Length, iv.Length);
-        Buffer.BlockCopy(encrypted, 0, result, salt.Length + iv.Length, encrypted.Length);
-        return result;
+        return memoryStream.ToArray();
     }
 
     private static string Decrypt(byte[] cipherTextWithSaltAndIv, string key)
     {
-        string plaintext;
-        using (var aes = Aes.Create())
-        {
-            // Extract the salt from the beginning of the array
-            byte[] salt = new byte[SaltSize];
-            Array.Copy(cipherTextWithSaltAndIv, 0, salt, 0, SaltSize);
+        using var memoryStream = new MemoryStream(cipherTextWithSaltAndIv);
 
-            // Extract the IV, which comes right after the salt
-            int ivSize = aes.BlockSize / 8;
-            byte[] iv = new byte[ivSize];
-            Array.Copy(cipherTextWithSaltAndIv, SaltSize, iv, 0, ivSize);
-            aes.IV = iv;
+        byte[] salt = new byte[SaltSize];
+        memoryStream.Read(salt, 0, salt.Length);
 
-            // Extract the actual encrypted data
-            int encryptedDataSize = cipherTextWithSaltAndIv.Length - SaltSize - ivSize;
-            byte[] encryptedData = new byte[encryptedDataSize];
-            Array.Copy(cipherTextWithSaltAndIv, SaltSize + ivSize, encryptedData, 0, encryptedDataSize);
+        using var aes = Aes.Create();
+        byte[] iv = new byte[aes.BlockSize / 8];
+        memoryStream.Read(iv, 0, iv.Length);
+        aes.IV = iv;
 
-            using (var keyDerivation = new Rfc2898DeriveBytes(key, salt, 10000, HashAlgorithmName.SHA256))
-            {
-                aes.Key = keyDerivation.GetBytes(32);
-            }
+        aes.Key = new Rfc2898DeriveBytes(key, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256).GetBytes(32);
 
-            using var decryptor = aes.CreateDecryptor(aes.Key, aes.IV);
-            using var memoryStream = new MemoryStream(encryptedData);
-            using var cryptoStream = new CryptoStream(memoryStream, decryptor, CryptoStreamMode.Read);
-            using var streamReader = new StreamReader(cryptoStream);
-            plaintext = streamReader.ReadToEnd();
-        }
-        return plaintext;
+        using var cryptoStream = new CryptoStream(memoryStream, aes.CreateDecryptor(), CryptoStreamMode.Read);
+        using var streamReader = new StreamReader(cryptoStream, Encoding.UTF8);
+        return streamReader.ReadToEnd();
     }
 }

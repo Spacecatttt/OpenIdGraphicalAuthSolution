@@ -67,10 +67,18 @@
                 </div>
                 <button type="submit" class="btn-success">Log In</button>
             </form>
-            <div class="container-inline">
-                <p>Don’t have an account?</p>
-                <a href="/account/register">Sign up</a>
-            </div>
+            @if (SignupEnabled && !IsOidcFlow)
+            {
+                <div class="container-inline">
+                    <p>Don’t have an account?</p>
+                    <a href="@($"/account/register?returnUrl={WebUtility.UrlEncode(ReturnUrl)}")">Sign up</a>
+                </div>
+            }else if (SignupEnabled && IsOidcFlow){
+                <div class="container-inline">
+                    <p>Don’t have an account?</p>
+                    <a href="@($"/account/member-register?returnUrl={WebUtility.UrlEncode(ReturnUrl)}")">Sign up</a>
+                </div>
+            }
         </section>
     </div>
     <div class="container-3">
@@ -83,6 +91,7 @@
     [Parameter] public string? ClientId { get; set; }
     [Parameter] public string? ReturnUrl { get; set; }
     [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public bool SignupEnabled { get; set; }
 
     private string loginMethod = "password";
     private string? selectedFileName;

@@ -2,14 +2,19 @@
 @layout DefaultLayout
 @attribute [AllowAnonymous]
 
-@using System.ComponentModel.DataAnnotations
-@using OpenIdProvider.Data.Models
-@using Microsoft.AspNetCore.Components.Forms
+@using Duende.IdentityServer.EntityFramework.DbContexts
 @using Duende.IdentityServer.Services
+@using Microsoft.EntityFrameworkCore
+@using OpenIdProvider.Data
 
 @inject IIdentityServerInteractionService Interaction
+@inject IDbContextFactory<ConfigurationDbContext> ConfigDbContextFactory
+@inject IDbContextFactory<ApplicationDbContext> AppDbContextFactory
 
-<LoginForm IsOidcFlow="@isOidcFlow" ClientId="@clientId" ReturnUrl="@ReturnUrl" ErrorMessage="@ErrorMessage" />
+<PageTitle>Log in</PageTitle>
+
+<LoginForm IsOidcFlow="@isOidcFlow" ClientId="@clientId" ReturnUrl="@ReturnUrl" ErrorMessage="@ErrorMessage"
+    SignupEnabled="@signupEnabled" />
 
 @code {
     [SupplyParameterFromQuery]
@@ -20,6 +25,7 @@
 
     private bool isOidcFlow;
     private string? clientId;
+    private bool signupEnabled = true; // Default to true for direct access
 
     protected override async Task OnInitializedAsync()
     {
@@ -31,6 +37,24 @@
             {
                 isOidcFlow = true;
                 clientId = context.Client.ClientId;
+
+                await using var configDbContext = await ConfigDbContextFactory.CreateDbContextAsync();
+                var client = await configDbContext.Clients
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.ClientId == clientId);
+
+                if (client != null)
+                {
+                    await using var appDbContext = await AppDbContextFactory.CreateDbContextAsync();
+                    var ownership = await appDbContext.ClientOwnerships.AsNoTracking()
+                    .FirstOrDefaultAsync(co => co.ClientId == client.Id);
+
+                    signupEnabled = ownership?.EnableSignup ?? false;
+                }
+                else
+                {
+                    signupEnabled = false;
+                }
             }
         }
     }
