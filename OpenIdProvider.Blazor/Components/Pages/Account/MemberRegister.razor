@@ -1,0 +1,217 @@
+@page "/account/member-register"
+@layout DefaultLayout
+@attribute [AllowAnonymous]
+
+@using System.Net
+@using Microsoft.AspNetCore.Http
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using Duende.IdentityServer
+@using Duende.IdentityServer.Services
+@using Duende.IdentityServer.EntityFramework.DbContexts
+@using OpenIdProvider.Data
+@using OpenIdProvider.Data.Models
+@using OpenIdProvider.Blazor.Services
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IIdentityServerInteractionService Interaction
+@inject IdentityRedirectManager RedirectManager
+@inject ApplicationDbContext DbContext
+@inject ConfigurationDbContext ConfigDbContext
+@inject IHttpContextAccessor HttpContextAccessor
+@inject ILogger<MemberRegister> Logger
+@inject IHelperService HelperService
+
+
+<PageTitle>Create Account</PageTitle>
+
+<div class="container-1">
+    <div class="container-2">
+        <h3>Create Your Account</h3>
+        <section>
+            <EditForm Model="Input" OnValidSubmit="HandleRegistration" FormName="MemberRegister" method="post">
+                <DataAnnotationsValidator />
+
+                @if (!string.IsNullOrEmpty(ErrorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">@ErrorMessage</div>
+                }
+                else if (identityErrors is not null)
+                {
+                    <div class="alert alert-danger" role="alert">
+                        @foreach (var error in identityErrors)
+                        {
+                            <p>@error.Description</p>
+                        }
+                    </div>
+                }
+
+                <div class="form-floating mb-2">
+                    <InputText @bind-Value="Input.DisplayName" class="form-control" placeholder="." />
+                    <label class="form-label">Visible Name</label>
+                    <ValidationMessage For="() => Input.DisplayName" class="text-danger" />
+                </div>
+                <div class="form-floating mb-2">
+                    <InputText @bind-Value="Input.Email" type="email" class="form-control" placeholder="." />
+                    <label class="form-label">Email</label>
+                    <ValidationMessage For="() => Input.Email" class="text-danger" />
+                </div>
+                <div class="form-floating mb-2">
+                    <InputText @bind-Value="Input.Password" type="password" class="form-control" placeholder="." />
+                    <label class="form-label">Password</label>
+                    <ValidationMessage For="() => Input.Password" class="text-danger" />
+                </div>
+                <div class="form-floating mb-2">
+                    <InputText @bind-Value="Input.ConfirmPassword" type="password" class="form-control" placeholder="." />
+                    <label class="form-label">Confirm Password</label>
+                    <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
+                </div>
+
+                <button type="submit" class="btn-success mt-3">Create Account</button>
+            </EditForm>
+
+            <div class="container-inline">
+                <p>Already have an account?</p>
+                <a href="@($"/account/login?returnUrl={WebUtility.UrlEncode(ReturnUrl)}")">Sign in</a>
+            </div>
+        </section>
+    </div>
+    <div class="container-3">
+        <img src="/images/mountainsSignUp.png" alt="Mountains" />
+    </div>
+</div>
+
+@code {
+    private IEnumerable<IdentityError>? identityErrors;
+    private HttpContext _httpContext = default!;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? ErrorMessage { get; set; }
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    protected override void OnInitialized()
+    {
+        _httpContext = HttpContextAccessor.HttpContext ?? throw new InvalidOperationException("HttpContext is not available.");
+    }
+
+    private async Task HandleRegistration()
+    {
+        if (string.IsNullOrEmpty(ReturnUrl))
+        {
+            // Use IdentityRedirectManager to redirect with an error status
+            RedirectManager.RedirectToCurrentPageWithStatus("ReturnUrl is required.", _httpContext);
+            return;
+        }
+
+        var context = await Interaction.GetAuthorizationContextAsync(ReturnUrl);
+        if (context == null)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus("Invalid request. Authorization context not found.", _httpContext);
+            return;
+        }
+
+        var client = await ConfigDbContext.Clients.AsNoTracking().FirstOrDefaultAsync(c => c.ClientId == context.Client.ClientId);
+        if (client == null)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus("Client application not found.", _httpContext);
+            return;
+        }
+
+        var ownership = await DbContext.ClientOwnerships.AsNoTracking().FirstOrDefaultAsync(co => co.ClientId == client.Id);
+        if (ownership == null)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus("Client is not associated with any organization.", _httpContext);
+            return;
+        }
+        var organizationId = ownership.OrganizationId;
+
+        // Generate a unique username
+        string newUserName;
+        while (true)
+        {
+            var randomSuffix = HelperService.GenerateRandomString(8);
+            newUserName = $"user-{randomSuffix}";
+
+            var userExists =await UserManager.FindByNameAsync(newUserName);
+            if (userExists == null)
+            {
+                break;
+            }
+        }
+
+        var newUser = new ApplicationUser
+        {
+            UserName = newUserName,
+            Email = Input.Email,
+            DisplayName = Input.DisplayName,
+            EmailConfirmed = true
+        };
+
+        bool registrationSuccess = false;
+        await using var transaction = await DbContext.Database.BeginTransactionAsync();
+        try
+        {
+            var result = await UserManager.CreateAsync(newUser, Input.Password);
+            if (!result.Succeeded)
+            {
+                identityErrors = result.Errors;
+                await transaction.RollbackAsync();
+                return;
+            }
+
+            DbContext.UserOrganizationRoles.Add(new UserOrganizationRole
+            {
+                UserId = newUser.Id,
+                OrganizationId = organizationId,
+                Role = OrganizationRole.Member
+            });
+
+            DbContext.UserClientPermissions.Add(new UserClientPermission
+            {
+                UserId = newUser.Id,
+                ClientId = client.Id
+            });
+
+            await DbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+            registrationSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "An error occurred during the registration transaction for user {Email}", Input.Email);
+            identityErrors = new[] { new IdentityError { Description = $"A database error occurred during registration: {ex.Message}" } };
+        }
+
+        if (registrationSuccess)
+        {
+            await SignInManager.SignInAsync(newUser, isPersistent: false);
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Visible name is required")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Email is required")]
+        [EmailAddress(ErrorMessage = "Invalid email address format")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password is required")]
+        [MinLength(6, ErrorMessage = "The password must be at least 6 characters long")]
+        public string Password { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password confirmation is required")]
+        [Compare(nameof(Password), ErrorMessage = "The password and confirmation password do not match.")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}
