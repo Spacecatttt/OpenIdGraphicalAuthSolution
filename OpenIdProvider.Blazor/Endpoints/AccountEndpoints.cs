@@ -319,9 +319,6 @@ public static class AccountEndpoints
                         await userManager.AddPasswordAsync(existingUser, input.User.Password);
                     }
 
-                    await userManager.UpdateAsync(existingUser);
-                    userToSignIn = existingUser;
-
                     var updateResult = await userManager.UpdateAsync(existingUser);
                     if (!updateResult.Succeeded)
                         throw new Exception(string.Join(", ", updateResult.Errors.Select(e => e.Description)));
@@ -349,6 +346,7 @@ public static class AccountEndpoints
                     Role = OrganizationRole.Owner
                 });
 
+                await dbContext.SaveChangesAsync();
                 await transaction.CommitAsync();
                 await signInManager.SignInAsync(userToSignIn, isPersistent: false);
                 return Results.Redirect("/");
@@ -404,6 +402,7 @@ public class UserInputModel
     [Required(ErrorMessage = "Password is required.")]
     [DataType(DataType.Password)]
     [MinLength(6, ErrorMessage = "Password must be at least 6 characters long.")]
+    [RegularExpression(@".*\d.*", ErrorMessage = "Password must contain at least one number.")]
     public string Password { get; set; } = "";
     [DataType(DataType.Password), Compare(nameof(Password))]
     public string ConfirmPassword { get; set; } = "";

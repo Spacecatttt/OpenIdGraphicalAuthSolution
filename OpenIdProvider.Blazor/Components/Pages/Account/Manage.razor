@@ -485,6 +485,7 @@ else
             if (!addResult.Succeeded) throw new Exception(string.Join("\n", addResult.Errors.Select(e => e.Description)));
 
             user.GraphicalPasswordKey = null;
+            user.GraphicalAuthMethodType = "ImageSteganography";
             var updateResult = await UserManager.UpdateAsync(user);
             if (!updateResult.Succeeded) throw new Exception(string.Join("\n", updateResult.Errors.Select(e => e.Description)));
 
@@ -548,6 +549,7 @@ else
                 throw new Exception(string.Join(", ", addPasswordResult.Errors.Select(e => e.Description)));
 
             user.GraphicalPasswordKey = key;
+            user.GraphicalAuthMethodType = "ImageSteganography";
             var updateResult = await UserManager.UpdateAsync(user);
             if (!updateResult.Succeeded)
                 throw new Exception(string.Join(", ", updateResult.Errors.Select(e => e.Description)));

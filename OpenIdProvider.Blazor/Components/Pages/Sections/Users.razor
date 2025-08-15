@@ -37,7 +37,7 @@ else
     <div class="page-container">
         <div class="page-header">
             <h1>Users in @AppState.SelectedOrganization.Name</h1>
-            <button type="button" @onclick="GoToAddPage" class="btn btn-primary">
+            <button type="button" @onclick="GoToAddPage" class="btn btn-primary" disabled="@(!CanManageUsers)">
                 <img src="/images/table/add.png" alt="Add User" class="btn-icon" />
                 <span>Add User</span>
             </button>
@@ -84,12 +84,21 @@ else
                             <td colspan="2">
                                 <div class="action-btn-group">
                                     <button @onclick='() => GoToEditPage(user.UserId)'
-                                            class="action-btn btn-edit"
-                                            disabled="@(!CanManageUsers)">Edit</button>
+                                        class="action-btn btn-edit"
+                                        disabled="@(!CanManageUsers)">
+                                        Edit
+                                    </button>
                                     <button @onclick='() => DeleteUser(user.UserId, user.User.DisplayName)'
-                                            class="action-btn btn-delete"
-                                            disabled="@(!CanManageUsers || AppState.CurrentUser?.Id == user.UserId)"
-                                            title="@(AppState.CurrentUser?.Id == user.UserId ? "You cannot remove yourself" : "")">Delete</button>
+                                        class="action-btn btn-delete"
+                                        disabled="@(!CanManageUsers ||
+                                            AppState.CurrentUser?.Id == user.UserId ||
+                                            user.Role == OrganizationRole.Owner)"
+                                        title="@(user.Role == OrganizationRole.Owner ?
+                                            "Cannot delete the organization owner" :
+                                            (AppState.CurrentUser?.Id == user.UserId ?
+                                            "You cannot remove yourself" : ""))">
+                                        Delete
+                                    </button>
                                 </div>
                             </td>
                         </tr>

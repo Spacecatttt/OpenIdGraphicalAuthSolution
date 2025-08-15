@@ -143,6 +143,10 @@ else
                         <button type="button" class="btn btn-secondary mt-2 align-self-start" @onclick="AddSecret">Add Secret</button>
                     </div>
                 </div>
+                <div class="form-group-checkbox">
+                    <InputCheckbox id="requirePkce" @bind-Value="clientModel.RequirePkce" />
+                    <label for="requirePkce">Require PKCE (Proof Key for Code Exchange)</label>
+                </div>
 
                 <hr/>
 
@@ -330,6 +334,7 @@ else
                 AccessTokenLifetime = 3600,
                 RefreshTokenExpiration = 30,
                 IncludeJwtId = true,
+                RequirePkce = true,
                 AlwaysIncludeUserClaimsInIdToken = false
             };
         }
@@ -374,6 +379,7 @@ else
                     BackChannelLogoutUri = client.BackChannelLogoutUri,
                     AccessTokenLifetime = client.AccessTokenLifetime,
                     RefreshTokenExpiration = (int)TimeSpan.FromSeconds(client.AbsoluteRefreshTokenLifetime).TotalDays,
+                    RequirePkce = client.RequirePkce,
                     AlwaysIncludeUserClaimsInIdToken = client.AlwaysIncludeUserClaimsInIdToken,
                     IncludeJwtId = client.IncludeJwtId,
                     EnableSignup = ownership.EnableSignup
@@ -414,7 +420,7 @@ else
                     Enabled = clientModel.Enabled,
                     ProtocolType = "oidc",
                     RequireClientSecret = true,
-                    RequirePkce = true,
+                    RequirePkce = clientModel.RequirePkce,
                     AllowOfflineAccess = clientModel.AllowOfflineAccess,
                     AllowedGrantTypes = clientModel.AllowedGrantTypes
                         .Select(gt => new ClientGrantType { GrantType = gt })
@@ -476,6 +482,7 @@ else
                     clientToUpdate.LogoUri = clientModel.LogoUri;
                     clientToUpdate.Enabled = clientModel.Enabled;
                     clientToUpdate.AllowOfflineAccess = clientModel.AllowOfflineAccess;
+                    clientToUpdate.RequirePkce = clientModel.RequirePkce;
 
                     // Synchronize collections
                     clientToUpdate.AllowedGrantTypes.SyncCollection(
@@ -599,6 +606,7 @@ else
         public int AccessTokenLifetime { get; set; }
         public int RefreshTokenExpiration { get; set; }
         public bool AllowOfflineAccess { get; set; }
+        public bool RequirePkce { get; set; } = true;
         public bool AlwaysIncludeUserClaimsInIdToken { get; set; }
         public bool IncludeJwtId { get; set; }
         public bool EnableSignup { get; set; }
