@@ -64,7 +64,7 @@ This is the simplest way to get everything running, as it handles the database a
 docker-compose up --build -d
 ```
 
-`Note!` After running for the first time, you will need to set up the database schema by [applying the database migrations](#applying-migrations).
+`Note!` After running for the first time, you will need to set up the database schema by [applying the database migrations](#applying-migrations) and [seeding the database](#seeding-data).
 
 The application will be available at `https://localhost:9331`.
 
@@ -89,7 +89,7 @@ Ensure the `"DefaultConnection"` string in `OpenIdProvider.Blazor/appsettings.js
 
 **Step 3: Apply Database Migrations**
 
-Before running the app for the first time, you need to create the database schema by [applying the database migrations](#applying-migrations).
+Before running the app for the first time, you need to create the database schema by [applying the database migrations](#applying-migrations) and [seeding the database](#seeding-data).
 
 **Step 4: Run the Project**
 ```bash
@@ -116,12 +116,25 @@ dotnet ef database update --context PersistedGrantDbContext --project OpenIdProv
 ```
 
 ## Seeding Data
-The project includes services to populate the database with test data, located in `OpenIdProvider.Blazor/Services/`.
 
-- **`DatabaseSeeder.cs`**: Can be called on startup to perform a full, large-volume seed of an empty database.
-- **`DataHelperService.cs`**: A utility service with methods to programmatically add specific data during development (e.g., create an organization for a specific user).
+### Initial Database Seeding
+If you are running the application for the first time, you need to add some standard data. This can be done easily by running:
+```bash
+cd DatabaseSeederTool
+dotnet run
+```
 
-The initial seeding is configured in `Program.cs`.
+### Additional Seeding or Data Management
+For seeding or modifying data, you can use the following utilities:
+
+- **`DatabaseSeeder.cs`**: Performs a full, large-scale seed of an empty database.
+- **`DataHelperService.cs`**: A helper service with methods to add specific data (e.g., create an organization for a specific user).
+
+The initial seeding process is configured in `DatabaseSeederTool/Program.cs`.
+To use the database seeder, simply uncomment the relevant code in `Program.cs` and run:
+```bash
+dotnet run
+```
 
 ### Creating New Migrations
 If you change any of the data models in the `OpenIdProvider.Data` project, you will need to create a new migration. The project uses three separate `DbContexts`, so you must specify which context the changes apply to.
