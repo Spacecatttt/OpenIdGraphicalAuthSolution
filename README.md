@@ -45,6 +45,8 @@ Create a `keys` folder in the root of the repository.
 mkdir -p ./keys
 ```
 
+`Note`: Update the `SERVER_CN="server domain name"` field in `generate-certs.sh` with your server's domain name.
+
 Generate the necessary certificate files using the provided script.
 ```bash
 chmod +x generate-certs.sh
@@ -134,6 +136,12 @@ The initial seeding process is configured in `DatabaseSeederTool/Program.cs`.
 To use the database seeder, simply uncomment the relevant code in `Program.cs` and run:
 ```bash
 dotnet run
+```
+
+After the seeding process is complete, you can log in with the following credentials:
+```bash
+Email: owner1@example.com
+Password: Password123!
 ```
 
 ### Creating New Migrations

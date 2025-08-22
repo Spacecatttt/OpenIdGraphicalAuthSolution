@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+SERVER_CN="server domain name"
+
 KEYS_DIR="./keys"
 mkdir -p "$KEYS_DIR"
 
@@ -24,7 +26,18 @@ echo "Generating CSR (Certificate Signing Request)..."
 openssl req -new \
     -key private_key.pem \
     -out server.csr \
-    -subj "/C=US/ST=State/L=City/O=MyOrg/OU=Dev/CN=localhost"
+    -subj "/C=US/ST=State/L=City/O=MyOrg/OU=Dev/CN=$SERVER_CN"
+
+cat > v3.ext <<EOF
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = $SERVER_CN
+DNS.2 = localhost
+EOF
 
 echo "Signing server certificate with Root CA..."
 openssl x509 -req \
@@ -34,7 +47,8 @@ openssl x509 -req \
     -CAcreateserial \
     -out certificate.pem \
     -days 365 \
-    -sha256
+    -sha256 \
+    -extfile v3.ext
 
 echo "Creating PFX (.p12) file..."
 openssl pkcs12 -export \
