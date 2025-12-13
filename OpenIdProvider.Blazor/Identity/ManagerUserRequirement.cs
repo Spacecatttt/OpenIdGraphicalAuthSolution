@@ -11,7 +11,7 @@ public class ManagerUserHandler : AuthorizationHandler<ManagerUserRequirement>
     private readonly IDbContextFactory<ApplicationDbContext> _dbContextFactory;
     private readonly UserManager<ApplicationUser> _userManager;
 
-    public ManagerUserHandler(IDbContextFactory<ApplicationDbContext> dbContextFactory, UserManager<ApplicationUser> userManager) // <-- ДОДАНО
+    public ManagerUserHandler(IDbContextFactory<ApplicationDbContext> dbContextFactory, UserManager<ApplicationUser> userManager)
     {
         _dbContextFactory = dbContextFactory;
         _userManager = userManager;
@@ -34,13 +34,16 @@ public class ManagerUserHandler : AuthorizationHandler<ManagerUserRequirement>
         {
             context.Succeed(requirement);
         }
+
         // In case if Manager no need to have own Organization
-        //var isManager = await dbContext.UserOrganizationRoles
-        //.AnyAsync(role => role.UserId == userId && role.Role >= OrganizationRole.Viewer);
-        //
-        //if (isManager)
-        //{
-        //    context.Succeed(requirement);
-        //}
+        var isManagerAnywhere = await dbContext.UserOrganizationRoles
+        .AsNoTracking()
+        .AnyAsync(role => role.UserId == userId && role.Role >= OrganizationRole.Viewer);
+
+        if (isManagerAnywhere)
+        {
+            context.Succeed(requirement);
+            return;
+        }
     }
 }

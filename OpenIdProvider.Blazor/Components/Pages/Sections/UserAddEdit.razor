@@ -424,6 +424,7 @@ else
         errorMessage = null;
         isSaving = true;
 
+        // Password will be ignored if user exists
         if (IsNew && userModel.AuthType == AuthMethod.Password && string.IsNullOrWhiteSpace(userModel.Password))
         {
             errorMessage = "Password is required for a new user with password authentication.";
@@ -446,63 +447,92 @@ else
 
         await using var dbContext = await DbContextFactory.CreateDbContextAsync();
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
-        ApplicationUser? newUser = null;
+        //ApplicationUser? newUser = null;
+        ApplicationUser? userTarget = null;
         try
         {
             if (IsNew)
             {
-                newUser = new ApplicationUser
+                var existingUser = await UserManager.FindByEmailAsync(userModel.Email);
+                if (existingUser != null)
                 {
-                    UserName = userModel.UserName,
-                    Email = userModel.Email,
-                    DisplayName = userModel.DisplayName,
-                    AvatarUrl = userModel.AvatarUrl,
-                    Country = userModel.Country,
-                    Location = userModel.Location,
-                    Address = userModel.Address,
-                    Bio = userModel.Bio,
-                    GraphicalPasswordKey = userModel.GraphicalPasswordKey,
-                    GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ? "ImageSteganography" : null
-                };
+                    dbContext.Users.Attach(existingUser);
+                    userTarget = existingUser;
 
-                var result = await UserManager.CreateAsync(newUser, userModel.Password);
-                if (!result.Succeeded)
-                {
-                    throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
-                }
-
-                // Create all related data
-                var userToUpdate = await dbContext.Users.FindAsync(newUser.Id);
-                if (userToUpdate == null)
-                {
-                    throw new Exception("Failed to retrieve newly created user.");
-                }
-
-                if (userModel.Role >= OrganizationRole.Viewer)
-                {
-                    var personalOrg = new Organization
+                    var alreadyInOrg = await dbContext.UserOrganizationRoles
+                        .AnyAsync(r => r.UserId == userTarget.Id && r.OrganizationId == AppState.SelectedOrganization.Id);
+                    if (alreadyInOrg)
                     {
-                        Name = $"{userModel.UserName}'s Personal Space",
-                        Slug = $"{userModel.UserName}-personal-space",
-                        CreatedDate = DateTime.UtcNow,
-                        ModifiedDate = DateTime.UtcNow
+                        errorMessage = $"User {userModel.Email} is already a member of this organization.";
+                        isSaving = false;
+                        return;
+                    }
+
+                    Logger.LogInformation($"User {userModel.Email} exists. Adding to organization {AppState.SelectedOrganization.Name}.");
+                }
+                else
+                {
+                    var userNameExists = await dbContext.Users.AnyAsync(u => u.UserName == userModel.UserName);
+                    if (userNameExists)
+                    {
+                        throw new Exception($"Username '{userModel.UserName}' is already taken.");
+                    }
+
+                    userTarget = new ApplicationUser
+                    {
+                        UserName = userModel.UserName,
+                        Email = userModel.Email,
+                        DisplayName = userModel.DisplayName,
+                        AvatarUrl = userModel.AvatarUrl,
+                        Country = userModel.Country,
+                        Location = userModel.Location,
+                        Address = userModel.Address,
+                        Bio = userModel.Bio,
+                        GraphicalPasswordKey = userModel.GraphicalPasswordKey,
+                        GraphicalAuthMethodType = userModel.AuthType == AuthMethod.Graphical ? "ImageSteganography" : null
                     };
-                    dbContext.Organizations.Add(personalOrg);
-                    await dbContext.SaveChangesAsync();
-                    userToUpdate.PrimaryOrganizationId = personalOrg.Id;
 
-                    // Add the Owner role
-                    dbContext.UserOrganizationRoles.Add(new UserOrganizationRole
+                    var result = await UserManager.CreateAsync(userTarget, userModel.Password);
+                    if (!result.Succeeded)
                     {
-                        UserId = newUser.Id,
-                        OrganizationId = personalOrg.Id,
-                        Role = OrganizationRole.Owner
-                    });
+                        throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
+                    }
+
+                    // Create all related data
+                    var userToUpdate = await dbContext.Users.FindAsync(userTarget.Id);
+                    if (userToUpdate == null)
+                    {
+                        throw new Exception("Failed to retrieve newly created user.");
+                    }
+                    // Update user reference
+                    userTarget = userToUpdate;
+
+                    if (userModel.Role >= OrganizationRole.Viewer)
+                    {
+                        var personalOrg = new Organization
+                        {
+                            Name = $"{userModel.UserName}'s Personal Space",
+                            Slug = $"{userModel.UserName}-personal-space",
+                            CreatedDate = DateTime.UtcNow,
+                            ModifiedDate = DateTime.UtcNow
+                        };
+                        dbContext.Organizations.Add(personalOrg);
+                        await dbContext.SaveChangesAsync();
+                        userTarget.PrimaryOrganizationId = personalOrg.Id;
+
+                        // Add the Owner role
+                        dbContext.UserOrganizationRoles.Add(new UserOrganizationRole
+                        {
+                            UserId = userTarget.Id,
+                            OrganizationId = personalOrg.Id,
+                            Role = OrganizationRole.Owner
+                        });
+                    }
                 }
 
                 dbContext.UserOrganizationRoles.Add(new UserOrganizationRole
                 {
-                    UserId = newUser.Id,
+                    UserId = userTarget.Id,
                     OrganizationId = AppState.SelectedOrganization!.Id,
                     Role = userModel.Role
                 });
@@ -511,12 +541,15 @@ else
                 var selectedGroups = await dbContext.Groups.Where(g => userModel.SelectedGroupIds.Contains(g.Id)).ToListAsync();
                 foreach (var group in selectedGroups)
                 {
-                    userToUpdate.Groups.Add(group);
+                    if (!userTarget.Groups.Any(g => g.Id == group.Id))
+                    {
+                        userTarget.Groups.Add(group);
+                    }
                 }
                 // Assign clients
                 foreach(var clientId in userModel.SelectedClientIds)
                 {
-                    userToUpdate.AllowedClientPermissions.Add(new UserClientPermission { ClientId = clientId });
+                    userTarget.AllowedClientPermissions.Add(new UserClientPermission { ClientId = clientId });
                 }
             }
             else
@@ -607,9 +640,14 @@ else
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            if (newUser != null)
+
+            if (IsNew && userTarget != null && userTarget.Id != Guid.Empty)
             {
-                await UserManager.DeleteAsync(newUser);
+                 var junkUser = await UserManager.FindByIdAsync(userTarget.Id.ToString());
+                 if (junkUser != null && (await dbContext.UserOrganizationRoles.CountAsync(r => r.UserId == junkUser.Id)) == 0)
+                 {
+                     await UserManager.DeleteAsync(junkUser);
+                 }
             }
             Logger.LogError(ex, "An error occurred while saving the user.");
             errorMessage = $"An error occurred: {ex.Message}";

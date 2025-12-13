@@ -125,11 +125,28 @@ builder.Services.AddDataProtection()
 // Add support for Razor Pages (for IdentityServer UI)
 builder.Services.AddRazorPages();
 
+// builder.Services.AddHttpClient();
+// builder.Services.AddScoped(sp =>
+// {
+//     var navigationManager = sp.GetRequiredService<NavigationManager>();
+//     return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
+// });
+
 builder.Services.AddHttpClient();
 builder.Services.AddScoped(sp =>
 {
     var navigationManager = sp.GetRequiredService<NavigationManager>();
-    return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
+
+    var handler = new HttpClientHandler();
+    if (builder.Environment.IsDevelopment())
+    {
+        handler.ServerCertificateCustomValidationCallback =
+            (message, cert, chain, errors) => true;
+    }
+    return new HttpClient(handler)
+    {
+        BaseAddress = new Uri(navigationManager.BaseUri)
+    };
 });
 
 builder.Services.AddApexCharts(e =>
