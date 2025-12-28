@@ -6,74 +6,162 @@
 @using System.Diagnostics
 @using Duende.IdentityServer.Models
 @using Duende.IdentityServer.Services
+@using Microsoft.AspNetCore.Diagnostics
 @inject IIdentityServerInteractionService Interaction
+@inject IWebHostEnvironment Environment
 
 <PageTitle>Error</PageTitle>
 
 <style>
-    .error-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
-        text-align: center;
-        padding-top: 5rem;
+    :root {
+        --danger: #f84a4a;
+        --danger-bg: #ffa4a4;
     }
+
+    :root.dark-theme {
+        --danger: #f87171;
+        --danger-bg: #83141a;
+    }
+
     .error-card {
-        max-width: 600px;
+        align-self: center;
+        background: var(--bg-color);
         width: 100%;
+        max-width: 750px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        border: 1px solid var(--border-color);
+        overflow: hidden;
+        margin: auto;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
     }
-    .card{
-        background-color: var(--bg-color);
-        border-color: var(--border-color);
+
+    .error-header {
+        background-color: var(--danger-bg);
+        padding: 2rem;
+        text-align: center;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .error-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .error-title {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1.5rem;
+    }
+
+    .error-body {
+        padding: 2rem;
+        color: var(--text-primary);
+    }
+
+    .error-details-box {
+        background-color: var(--secondary-bg);
+        border-radius: 6px;
+        padding: 1rem;
+        margin-top: 1.5rem;
+        border-left: 4px solid var(--danger-bg);
+        font-size: 0.9rem;
+    }
+
+    .error-label {
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        margin-bottom: 0.25rem;
+        display: block;
+    }
+
+    .btn-home {
+        display: inline-block;
+        margin-top: 2rem;
+        padding: 0.75rem 1.5rem;
+        background-color: var(--accent-purple);
+        color: white;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: background 0.2s;
+        width: 100%;
+        text-align: center;
+    }
+
+    .btn-home:hover {
+        background-color: #7335b8;
+        color: white;
     }
 </style>
 
-<div class="error-container">
-    <div class="error-card">
-        <h1 class="text-danger">Error</h1>
+<div class="error-card">
+    <div class="error-header">
+        <div class="error-icon">⚠️</div>
+        <h1 class="error-title">Oops! Something went wrong</h1>
+    </div>
 
+    <div class="error-body">
         @if (OidcError != null)
         {
-            <div class="alert alert-danger">
-                <p>An error occurred during the authentication process.</p>
+            <p>We encountered an issue processing your authentication request.</p>
+
+            <div class="error-details-box">
+                <span class="error-label">Error Code</span>
+                <strong style="color: var(--danger-color);">@OidcError.Error</strong>
+
+                @if (!string.IsNullOrEmpty(OidcError.ErrorDescription))
+                {
+                    <div style="margin-top: 10px;">
+                        <span class="error-label">Description</span>
+                        <span>@OidcError.ErrorDescription</span>
+                    </div>
+                }
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    OIDC Error Details
-                </div>
-                <div class="card-body">
-                    <h5 class="card-title text-danger">@OidcError.Error</h5>
-                    @if (OidcError.ErrorDescription != null)
-                    {
-                        <p class="card-text">@OidcError.ErrorDescription</p>
-                    }
-                </div>
-            </div>
-
-            @if (OidcError.RedirectUri != null)
+            @if (!string.IsNullOrEmpty(OidcError.RedirectUri))
             {
-                <div class="mt-3">
-                    <a class="btn btn-secondary" href="@OidcError.RedirectUri">
-                        Return to Client Application
+                <div style="margin-top: 1.5rem; text-align: center;">
+                    <a href="@OidcError.RedirectUri" class="btn-home" style="background-color: #64748b;">
+                        Return to Application
                     </a>
                 </div>
             }
         }
         else
         {
-            <h2 class="text-danger">An error occurred while processing your request.</h2>
-            @if (ShowRequestId)
+            <p>An unexpected error occurred in the application.</p>
+
+            @if (Environment.IsDevelopment() || ShowRequestId)
             {
-                <p>
-                    <strong>Request ID:</strong> <code>@RequestId</code>
-                </p>
+                <div class="error-details-box">
+                    @if (ShowRequestId)
+                    {
+                        <div>
+                            <span class="error-label">Request ID</span>
+                            <code>@RequestId</code>
+                        </div>
+                    }
+
+                    @if (ExceptionMessage != null && Environment.IsDevelopment())
+                    {
+                        <div style="margin-top: 10px; overflow-x: auto;">
+                            <span class="error-label">Exception</span>
+                            <pre style="font-size: 0.8rem;">@ExceptionMessage</pre>
+                        </div>
+                    }
+                </div>
             }
         }
+
+        <a href="/" class="btn-home">Go to Homepage</a>
     </div>
 </div>
-
 
 @code {
     [CascadingParameter]
@@ -82,15 +170,28 @@
     private string? RequestId { get; set; }
     private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
     private ErrorMessage? OidcError { get; set; }
+    private string? ExceptionMessage { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
 
-        var errorId = HttpContext?.Request.Query["errorId"].FirstOrDefault();
-        if (errorId != null)
+        if (HttpContext != null)
         {
-            OidcError = await Interaction.GetErrorContextAsync(errorId);
+            var errorId = HttpContext.Request.Query["errorId"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(errorId))
+            {
+                OidcError = await Interaction.GetErrorContextAsync(errorId);
+            }
+
+            if (OidcError == null)
+            {
+                var exceptionHandlerPathFeature = HttpContext.Features.Get<IExceptionHandlerPathFeature>();
+                if (exceptionHandlerPathFeature?.Error != null)
+                {
+                    ExceptionMessage = exceptionHandlerPathFeature.Error.Message;
+                }
+            }
         }
     }
 }
