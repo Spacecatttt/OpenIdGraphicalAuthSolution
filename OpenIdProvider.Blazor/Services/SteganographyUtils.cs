@@ -110,7 +110,10 @@ public static class ImageSteganographyUtility
                     {
                         Rgba32 pixel = image[x + blockX, y + blockY];
                         // Standard luminance calculation
-                        luminances.Add(0.299 * pixel.R + 0.587 * pixel.G + 0.114 * pixel.B);
+                        byte stableR = (byte)(pixel.R & 0xF0);
+                        byte stableG = (byte)(pixel.G & 0xF0);
+                        byte stableB = (byte)(pixel.B & 0xF0);
+                        luminances.Add(0.299 * stableR + 0.587 * stableG + 0.114 * stableB);
                     }
                 }
 
@@ -130,7 +133,8 @@ public static class ImageSteganographyUtility
         }
 
         // Shuffle the list of safe locations using the key as a seed
-        int seed = key.GetHashCode();
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
+        int seed = BitConverter.ToInt32(hash, 0);
         var random = new Random(seed);
 
         // Fisher-Yates shuffle algorithm
