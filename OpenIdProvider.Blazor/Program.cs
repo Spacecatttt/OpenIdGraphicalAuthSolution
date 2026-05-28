@@ -205,4 +205,4 @@ app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.MapAccountEndpoints();
 
-app.Run();
+await app.RunAsync();

@@ -105,31 +105,9 @@ public static class ImageSteganographyUtility
         {
             for (int x = 0; x < image.Width - BlockSize; x += BlockSize)
             {
-                var luminances = new List<double>();
-                for (int blockY = 0; blockY < BlockSize; blockY++)
+                if (IsBlockComplexEnough(image, x, y))
                 {
-                    for (int blockX = 0; blockX < BlockSize; blockX++)
-                    {
-                        Rgba32 pixel = image[x + blockX, y + blockY];
-                        // Standard luminance calculation
-                        byte stableR = (byte)(pixel.R & 0xF0);
-                        byte stableG = (byte)(pixel.G & 0xF0);
-                        byte stableB = (byte)(pixel.B & 0xF0);
-                        luminances.Add(0.299 * stableR + 0.587 * stableG + 0.114 * stableB);
-                    }
-                }
-
-                double stdDev = CalculateStdDev(luminances);
-                if (stdDev > ComplexityThreshold)
-                {
-                    // If block is complex enough, add all its pixels to the list
-                    for (int blockY = 0; blockY < BlockSize; blockY++)
-                    {
-                        for (int blockX = 0; blockX < BlockSize; blockX++)
-                        {
-                            safeLocations.Add(new Point(x + blockX, y + blockY));
-                        }
-                    }
+                    AddBlockPixels(safeLocations, x, y);
                 }
             }
         }
@@ -147,6 +125,45 @@ public static class ImageSteganographyUtility
         }
 
         return safeLocations;
+    }
+
+    /// <summary>
+    /// Calculates if a specific block meets the required complexity threshold.
+    /// </summary>
+    private static bool IsBlockComplexEnough(Image<Rgba32> image, int startX, int startY)
+    {
+        var luminances = new List<double>(BlockSize * BlockSize);
+
+        for (int blockY = 0; blockY < BlockSize; blockY++)
+        {
+            for (int blockX = 0; blockX < BlockSize; blockX++)
+            {
+                Rgba32 pixel = image[startX + blockX, startY + blockY];
+
+                // Standard luminance calculation with bitwise stabilization
+                byte stableR = (byte)(pixel.R & 0xF0);
+                byte stableG = (byte)(pixel.G & 0xF0);
+                byte stableB = (byte)(pixel.B & 0xF0);
+
+                luminances.Add(0.299 * stableR + 0.587 * stableG + 0.114 * stableB);
+            }
+        }
+
+        return CalculateStdDev(luminances) > ComplexityThreshold;
+    }
+
+    /// <summary>
+    /// Appends all pixel coordinates of a block to the master locations list.
+    /// </summary>
+    private static void AddBlockPixels(List<Point> locations, int startX, int startY)
+    {
+        for (int blockY = 0; blockY < BlockSize; blockY++)
+        {
+            for (int blockX = 0; blockX < BlockSize; blockX++)
+            {
+                locations.Add(new Point(startX + blockX, startY + blockY));
+            }
+        }
     }
 
     /// <summary>
