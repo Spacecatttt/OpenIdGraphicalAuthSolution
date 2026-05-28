@@ -22,4 +22,7 @@ COPY --from=build /app/publish .
 COPY keys/rootCA.pem /usr/local/share/ca-certificates/mkcert-root.crt
 RUN update-ca-certificates
 
+RUN chown -R app:app /app
+USER app
+
 ENTRYPOINT ["dotnet", "OpenIdProvider.Blazor.dll"]

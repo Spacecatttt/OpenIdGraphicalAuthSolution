@@ -1,4 +1,11 @@
 services:
+  volume_setter:
+    image: alpine:latest
+    container_name: volume_setter
+    user: "root"
+    volumes:
+      - dataprotection_keys:/data-protection-keys
+    command: chown -R 1654:1654 /data-protection-keys
   openidprovider:
     build:
       context: .
@@ -19,7 +26,10 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=OpenIdProviderDb;Username=postgres;Password=password
       - DATAPROTECTION_KEYS_PATH=/data-protection-keys
     depends_on:
-      - postgres_db
+      postgres_db:
+        condition: service_started
+      volume_setter:
+        condition: service_completed_successfully
     volumes:
       - ./keys/certificate.p12:/https/certificate.p12
       - dataprotection_keys:/data-protection-keys
