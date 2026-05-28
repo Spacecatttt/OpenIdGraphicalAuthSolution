@@ -3,6 +3,8 @@ using System.Text;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
+namespace OpenIdProvider.Blazor.Services;
+
 public static class ImageSteganographyUtility
 {
     private const int SaltSize = 16;

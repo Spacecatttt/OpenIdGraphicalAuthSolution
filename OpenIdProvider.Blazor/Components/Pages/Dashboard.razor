@@ -50,7 +50,7 @@ else
         <h2 class="text-xl sm:text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Past 30 Days</h2>
         <ApexChart TItem="UserCount" Options="chartOptions">
             <ApexPointSeries TItem="UserCount" Items="dashboardData.DailyUserCounts" Name="New Users"
-                SeriesType="SeriesType.Line" XValue="@(e => e.Date)" YValue="@(e => e.Count)" />
+                             SeriesType="SeriesType.Line" XValue="@(e => e.Date)" YValue="@(e => e.Count)" />
         </ApexChart>
 
     </div>
@@ -105,11 +105,11 @@ else
             Labels = new XAxisLabels { Format = "dd MMM" }
         },
         Yaxis = new List<YAxis> {
-new YAxis {
-Title = new AxisTitle { Text = "Number of Registrations" },
-Labels = new YAxisLabels { Formatter = "function(val) { return val.toFixed(0); }" }
-}
-},
+            new YAxis {
+                Title = new AxisTitle { Text = "Number of Registrations" },
+                Labels = new YAxisLabels { Formatter = "function(val) { return val.toFixed(0); }" }
+            }
+        },
         Tooltip = new Tooltip
         {
             X = new TooltipX { Format = "dd MMMM yyyy" }
