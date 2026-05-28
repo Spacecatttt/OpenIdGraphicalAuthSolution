@@ -1,3 +1,6 @@
+using ApexCharts;
+using Duende.IdentityModel.Client;
+using Duende.IdentityServer.EntityFramework.DbContexts;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
@@ -5,20 +8,13 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-
-using ApexCharts;
-
-using Duende.IdentityModel.Client;
-
 using OpenIdProvider.Blazor.Components;
 using OpenIdProvider.Blazor.Components.Account;
 using OpenIdProvider.Blazor.Endpoints;
 using OpenIdProvider.Blazor.Services;
 using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
-
 using Serilog;
-using Duende.IdentityServer.EntityFramework.DbContexts;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -166,7 +162,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var dbContext = services.GetRequiredService<ApplicationDbContext>();
-        if (dbContext.Database.CanConnect())
+        if (await dbContext.Database.CanConnectAsync())
         {
             app.Logger.LogInformation("Database connection successfully established and warmed up.");
         }
@@ -195,7 +191,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 
-//
+// Authentication and Authorization
 app.UseAuthentication();
 app.UseIdentityServer();
 app.UseAuthorization();

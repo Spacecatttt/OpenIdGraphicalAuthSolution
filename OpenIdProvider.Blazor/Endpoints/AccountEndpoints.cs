@@ -1,23 +1,18 @@
 using System.ComponentModel.DataAnnotations;
 using System.Net;
-using System.Security.Claims;
 using System.Security.Cryptography;
-using System.Text.Json;
-
+using Duende.IdentityServer;
+using Duende.IdentityServer.EntityFramework.DbContexts;
+using Duende.IdentityServer.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
-using Duende.IdentityServer.EntityFramework.DbContexts;
-using Duende.IdentityServer.Services;
-
+using OpenIdProvider.Blazor.Services;
 using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
-
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using Microsoft.AspNetCore.Authentication;
-using Duende.IdentityServer;
 
 namespace OpenIdProvider.Blazor.Endpoints;
 

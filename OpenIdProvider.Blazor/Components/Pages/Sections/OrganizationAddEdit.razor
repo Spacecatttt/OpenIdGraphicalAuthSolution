@@ -229,7 +229,7 @@ else
             var name = e.Value?.ToString() ?? "";
             var slug = name.ToLower().Trim();
             slug = Regex.Replace(slug, @"\s+", "-");
-            slug = Regex.Replace(slug, @"[^a-z0-9-]", "");
+            slug = Regex.Replace(slug, @"[^a-z0-9-]", "", RegexOptions.NonBacktracking);
             organizationViewModel.Slug = slug;
         }
     }

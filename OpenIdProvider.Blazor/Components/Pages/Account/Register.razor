@@ -182,7 +182,7 @@
         {
             var name = Input.Organization.Name;
             var slug = name.ToLower().Trim().Replace(" ", "-");
-            slug = Regex.Replace(slug, @"[^a-z0-9-]", "");
+            slug = Regex.Replace(slug, @"[^a-z0-9-]", "",RegexOptions.NonBacktracking);
             Input.Organization.Slug = slug;
         }
     }

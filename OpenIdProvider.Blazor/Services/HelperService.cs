@@ -1,12 +1,10 @@
+using System.Security.Cryptography;
 using System.Text;
 
 namespace OpenIdProvider.Blazor.Services;
 
 public class HelperService : IHelperService
 {
-    private static readonly Random _random = new Random();
-
-
     public string GeneratePassword(int length = 14)
     {
         const string upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -14,27 +12,42 @@ public class HelperService : IHelperService
         const string digits = "0123456789";
         const string special = "!@#$%^&*()-_=+<,>.";
         var allChars = upper + lower + digits + special;
-        var password = new StringBuilder();
+        char[] password = new char[length];
 
         // Ensure the password contains at least one of every required character type
-        password.Append(upper[_random.Next(upper.Length)]);
-        password.Append(lower[_random.Next(lower.Length)]);
-        password.Append(digits[_random.Next(digits.Length)]);
-        password.Append(special[_random.Next(special.Length)]);
+        password[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+        password[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+        password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+        password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
 
         // Fill the rest of the password length with random characters
         for (int i = 4; i < length; i++)
         {
-            password.Append(allChars[_random.Next(allChars.Length)]);
+            password[i] = allChars[RandomNumberGenerator.GetInt32(allChars.Length)];
         }
 
-        return new string(password.ToString().ToCharArray().OrderBy(c => _random.Next()).ToArray());
+        SecureShuffle(password);
+        return new string(password);
     }
 
     public string GenerateRandomString(int length)
     {
         const string chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-        return new string(Enumerable.Repeat(chars, length)
-            .Select(s => s[_random.Next(s.Length)]).ToArray());
+        return RandomNumberGenerator.GetString(chars, length);
+    }
+
+    private static void SecureShuffle(char[] array)
+    {
+        int n = array.Length;
+        while (n > 1)
+        {
+            n--;
+            // Get a secure random index safely bounded within the remaining elements
+            int k = RandomNumberGenerator.GetInt32(n + 1);
+            // Swap elements
+            char value = array[k];
+            array[k] = array[n];
+            array[n] = value;
+        }
     }
 }

@@ -3,10 +3,12 @@ using System.Text;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
+namespace OpenIdProvider.Blazor.Services;
+
 public static class ImageSteganographyUtility
 {
     private const int SaltSize = 16;
-    private const int Pbkdf2Iterations = 10000;
+    private const int Pbkdf2Iterations = 100_000;
     // Size of blocks for complexity analysis
     private const int BlockSize = 8;
     // Threshold for standard deviation to consider a block "complex" enough
