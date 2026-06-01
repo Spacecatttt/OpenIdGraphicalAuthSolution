@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using OpenIdProvider.Blazor.Components;
@@ -15,7 +16,6 @@ using OpenIdProvider.Blazor.Services;
 using OpenIdProvider.Data;
 using OpenIdProvider.Data.Models;
 using Serilog;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,7 +35,6 @@ var migrationsAssembly = typeof(ApplicationDbContext).Assembly.GetName().Name;
 
 // --- Authentication & Authorization Configuration ---
 
-// Add authentication and authorization for application
 builder.Services.AddScoped<IAuthorizationHandler, ManagerUserHandler>();
 builder.Services.AddAuthorization(options =>
 {
@@ -64,6 +63,9 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     {
         options.Cookie.Name = "OpenIdProvider.Blazor.Auth";
         options.LoginPath = "/account/login";
+        // CRITICAL FOR REVERSE PROXIES: Ensures cookie is accessible and secure
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always; 
+        options.Cookie.SameSite = SameSiteMode.Lax;
     });
 
 // Duende IdentityServer
@@ -87,11 +89,10 @@ builder.Services.AddIdentityServer(options =>
     })
     .AddAspNetIdentity<ApplicationUser>();
 
-// Provides the authentication state to Blazor components
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddAuthorizationCore();
 
-// --- Database and My Services ---
+// --- Database and Custom Services ---
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<IOrganizationResolver, OrganizationResolver>();
 builder.Services.AddSingleton<IHelperService, HelperService>();
@@ -103,41 +104,32 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
         sqlOptions => sqlOptions.MigrationsAssembly(migrationsAssembly))
            .UseLazyLoadingProxies());
 
-builder.Services.AddDbContextFactory<Duende.IdentityServer.EntityFramework.DbContexts.ConfigurationDbContext>(options =>
+builder.Services.AddDbContextFactory<ConfigurationDbContext>(options =>
     options.UseNpgsql(
         connectionString,
         sqlOptions => sqlOptions.MigrationsAssembly(migrationsAssembly)),
     ServiceLifetime.Scoped);
-//
+
+// Data Protection Configuration
 var keysPath = Environment.GetEnvironmentVariable("DATAPROTECTION_KEYS_PATH");
 if (string.IsNullOrEmpty(keysPath))
 {
-    // if not exist path -> create it
     keysPath = Path.Combine(builder.Environment.ContentRootPath, "dp_keys");
 }
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 
-// Add support for Razor Pages (for IdentityServer UI)
 builder.Services.AddRazorPages();
 
-// builder.Services.AddHttpClient();
-// builder.Services.AddScoped(sp =>
-// {
-//     var navigationManager = sp.GetRequiredService<NavigationManager>();
-//     return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
-// });
-
+// HTTP Client Setup
 builder.Services.AddHttpClient();
 builder.Services.AddScoped(sp =>
 {
     var navigationManager = sp.GetRequiredService<NavigationManager>();
-
     var handler = new HttpClientHandler();
     if (builder.Environment.IsDevelopment())
     {
-        handler.ServerCertificateCustomValidationCallback =
-            (message, cert, chain, errors) => true;
+        handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
     }
     return new HttpClient(handler)
     {
@@ -146,16 +138,38 @@ builder.Services.AddScoped(sp =>
 });
 
 builder.Services.AddApexCharts(e =>
-            {
-                e.GlobalOptions = new ApexChartBaseOptions
-                {
-                    Debug = true,
-                    Theme = new Theme { Palette = PaletteType.Palette6 }
-                };
-            });
+{
+    e.GlobalOptions = new ApexChartBaseOptions
+    {
+        Debug = true,
+        Theme = new Theme { Palette = PaletteType.Palette6 }
+    };
+});
 
 var app = builder.Build();
 
+// --- Middleware Pipeline Configuration ---
+
+// FIX 1: Allow Forwarded Headers from any proxy (Required for Railway)
+var forwardedOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+};
+forwardedOptions.KnownNetworks.Clear();
+forwardedOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedOptions);
+
+// Middleware to strictly enforce HTTPS scheme internally based on proxy headers
+app.Use((context, next) =>
+{
+    if (context.Request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && proto == "https")
+    {
+        context.Request.Scheme = "https";
+    }
+    return next();
+});
+
+// Database Warmup Check
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -178,12 +192,12 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// Automatic Database Migrations with Retry Policy
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var logger = services.GetRequiredService<ILogger<Program>>();
 
-    // Set retry policy (e.g., 5 attempts with a 5-second delay)
     int maxRetries = 5;
     int delayInSeconds = 5;
 
@@ -197,7 +211,6 @@ using (var scope = app.Services.CreateScope())
             var configDbContext = services.GetRequiredService<ConfigurationDbContext>();
             var persistedGrantDbContext = services.GetRequiredService<PersistedGrantDbContext>();
 
-            // Try to apply migrations
             await appDbContext.Database.MigrateAsync();
             await configDbContext.Database.MigrateAsync();
             await persistedGrantDbContext.Database.MigrateAsync();
@@ -211,7 +224,6 @@ using (var scope = app.Services.CreateScope())
                 logger.LogInformation("Seeding completed successfully.");
             }
 
-            // If we succeeded, break out of the retry loop
             break;
         }
         catch (Exception ex)
@@ -221,7 +233,7 @@ using (var scope = app.Services.CreateScope())
             if (i == maxRetries)
             {
                 logger.LogError(ex, "All migration attempts failed. Shutting down.");
-                throw; // Crash if all retries failed
+                throw;
             }
 
             logger.LogInformation($"Waiting for {delayInSeconds} seconds before next attempt...");
@@ -230,31 +242,25 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-
 app.UseStaticFiles();
 app.UseRouting();
 
-// Authentication and Authorization
-app.UseAuthentication();
-app.UseIdentityServer();
+// FIX 2: Correct order. UseIdentityServer includes UseAuthentication inside itself.
+app.UseIdentityServer(); 
 app.UseAuthorization();
 
 app.UseAntiforgery();
 
-// ---Endpoint Mapping-- -
+// --- Endpoint Mapping ---
 app.MapRazorPages();
-// Map Blazor components for your main application
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
-
 app.MapAccountEndpoints();
 
 await app.RunAsync();
