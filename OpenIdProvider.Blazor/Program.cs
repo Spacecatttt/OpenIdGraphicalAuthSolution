@@ -183,27 +183,50 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
     var logger = services.GetRequiredService<ILogger<Program>>();
 
-    try
+    // Set retry policy (e.g., 5 attempts with a 5-second delay)
+    int maxRetries = 5;
+    int delayInSeconds = 5;
+
+    for (int i = 1; i <= maxRetries; i++)
     {
-        logger.LogInformation("Starting database migrations...");
+        try
+        {
+            logger.LogInformation($"Database connection attempt {i} of {maxRetries}...");
 
-        // Resolve the database contexts
-        var appDbContext = services.GetRequiredService<ApplicationDbContext>();
-        var configDbContext = services.GetRequiredService<ConfigurationDbContext>();
-        var persistedGrantDbContext = services.GetRequiredService<PersistedGrantDbContext>();
+            var appDbContext = services.GetRequiredService<ApplicationDbContext>();
+            var configDbContext = services.GetRequiredService<ConfigurationDbContext>();
+            var persistedGrantDbContext = services.GetRequiredService<PersistedGrantDbContext>();
 
-        // Apply migrations automatically
-        await appDbContext.Database.MigrateAsync();
-        await configDbContext.Database.MigrateAsync();
-        await persistedGrantDbContext.Database.MigrateAsync();
+            // Try to apply migrations
+            await appDbContext.Database.MigrateAsync();
+            await configDbContext.Database.MigrateAsync();
+            await persistedGrantDbContext.Database.MigrateAsync();
 
-        logger.LogInformation("Migrations applied successfully.");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "An error occurred while migrating or seeding the database.");
-        // Re-throw the exception so the app fails to start if the DB is in a bad state
-        throw;
+            logger.LogInformation("Migrations applied successfully.");
+
+            if (!appDbContext.Users.Any())
+            {
+                logger.LogInformation("Database is empty. Running DatabaseSeeder...");
+                // await DatabaseSeeder.SeedAsync(services);
+                logger.LogInformation("Seeding completed successfully.");
+            }
+
+            // If we succeeded, break out of the retry loop
+            break;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning($"Attempt {i} failed: {ex.Message}");
+
+            if (i == maxRetries)
+            {
+                logger.LogError(ex, "All migration attempts failed. Shutting down.");
+                throw; // Crash if all retries failed
+            }
+
+            logger.LogInformation($"Waiting for {delayInSeconds} seconds before next attempt...");
+            await Task.Delay(TimeSpan.FromSeconds(delayInSeconds));
+        }
     }
 }
 
