@@ -8,7 +8,7 @@ openidprovider:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:${PORT:-9330}
-      - ConnectionStrings__DefaultConnection=Host=${{PostgreSQL.RAILWAY_PRIVATE_DOMAIN}};Port=${{PostgreSQL.PGPORT}};Database=${{PostgreSQL.PGDATABASE}};Username=${{PostgreSQL.PGUSER}};Password=${{PostgreSQL.PGPASSWORD}}
+      - ConnectionStrings__DefaultConnection=Host=${{PostgreSQL.PGHOST}};Port=${{PostgreSQL.PGPORT}};Database=${{PostgreSQL.PGDATABASE}};Username=${{PostgreSQL.PGUSER}};Password=${{PostgreSQL.PGPASSWORD}}
       - DATAPROTECTION_KEYS_PATH=/data-protection-keys
     depends_on:
       postgres_db:
