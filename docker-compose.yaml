@@ -1,28 +1,13 @@
-services:
-  volume_setter:
-    image: alpine:latest
-    container_name: volume_setter
-    user: "root"
-    volumes:
-      - dataprotection_keys:/data-protection-keys
-    command: chown -R 1654:1654 /data-protection-keys
-  openidprovider:
+openidprovider:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: openidprovider_blazor
     ports:
       - "9330:9330"
-      - "9331:9331"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=https://+:9331;http://+:9330
-
-      # Kestrel configuration to use own certificate
-      - Kestrel__Certificates__Default__Path=/https/certificate.p12
-      - Kestrel__Certificates__Default__Password=changeit
-
-      # IMPORTANT: Update this with your actual database connection string
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:${PORT:-9330}
       - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=OpenIdProviderDb;Username=postgres;Password=password
       - DATAPROTECTION_KEYS_PATH=/data-protection-keys
     depends_on:
@@ -31,29 +16,6 @@ services:
       volume_setter:
         condition: service_completed_successfully
     volumes:
-      - ./keys/certificate.p12:/https/certificate.p12
       - dataprotection_keys:/data-protection-keys
     networks:
       - openid_network
-
-  postgres_db:
-    image: postgres:latest
-    container_name: postgres_db
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=OpenIdProviderDb
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - openid_network
-
-networks:
-  openid_network:
-    driver: bridge
-
-volumes:
-  postgres_data:
-  dataprotection_keys:
