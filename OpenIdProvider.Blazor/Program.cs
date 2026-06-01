@@ -178,6 +178,35 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+
+    try
+    {
+        logger.LogInformation("Starting database migrations...");
+
+        // Resolve the database contexts
+        var appDbContext = services.GetRequiredService<ApplicationDbContext>();
+        var configDbContext = services.GetRequiredService<ConfigurationDbContext>();
+        var persistedGrantDbContext = services.GetRequiredService<PersistedGrantDbContext>();
+
+        // Apply migrations automatically
+        await appDbContext.Database.MigrateAsync();
+        await configDbContext.Database.MigrateAsync();
+        await persistedGrantDbContext.Database.MigrateAsync();
+
+        logger.LogInformation("Migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while migrating or seeding the database.");
+        // Re-throw the exception so the app fails to start if the DB is in a bad state
+        throw;
+    }
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
